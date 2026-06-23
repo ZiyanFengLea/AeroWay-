@@ -1,0 +1,45 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: aeroway-postgres
+    environment:
+      POSTGRES_DB: aeroway
+      POSTGRES_USER: aeroway
+      POSTGRES_PASSWORD: aeroway
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aeroway -d aeroway"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - aeroway-postgres-data:/var/lib/postgresql/data
+
+  flight-service:
+    build:
+      context: ./services/flight-service
+    container_name: aeroway-flight-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/aeroway
+      SPRING_DATASOURCE_USERNAME: aeroway
+      SPRING_DATASOURCE_PASSWORD: aeroway
+    ports:
+      - "8080:8080"
+
+  frontend:
+    build:
+      context: ./frontend/aeroway-ui
+    container_name: aeroway-frontend
+    depends_on:
+      - flight-service
+    environment:
+      VITE_API_PROXY_TARGET: http://flight-service:8080
+    ports:
+      - "5173:5173"
+
+volumes:
+  aeroway-postgres-data:

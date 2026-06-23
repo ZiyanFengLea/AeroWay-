@@ -1,0 +1,330 @@
+openapi: 3.0.3
+info:
+  title: AeroWay Flight Booking API
+  version: 0.3.0
+  description: API contract for flight search, seat availability, seat reservation, and availability integrity checks.
+servers:
+  - url: http://localhost:8080
+paths:
+  /api/flights:
+    get:
+      summary: List flights
+      operationId: listFlights
+      responses:
+        "200":
+          description: Flights returned successfully.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FlightResponse"
+  /api/flights/{flightId}/seats:
+    get:
+      summary: List seats for a flight
+      operationId: listSeats
+      parameters:
+        - $ref: "#/components/parameters/FlightId"
+      responses:
+        "200":
+          description: Seats returned successfully.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SeatResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/flights/{flightId}:
+    get:
+      summary: Get flight details
+      operationId: getFlight
+      parameters:
+        - $ref: "#/components/parameters/FlightId"
+      responses:
+        "200":
+          description: Flight details returned successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FlightResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/flights/{flightId}/seats/{seatId}/reservations:
+    post:
+      summary: Reserve a seat
+      operationId: reserveSeat
+      parameters:
+        - $ref: "#/components/parameters/FlightId"
+        - $ref: "#/components/parameters/SeatId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReservationRequest"
+            example:
+              customerName: Ziyan Feng
+      responses:
+        "201":
+          description: Seat reserved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReservationResponse"
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/SeatAlreadyReserved"
+  /api/reservations/{reservationId}:
+    get:
+      summary: Get booking confirmation
+      operationId: getReservation
+      parameters:
+        - $ref: "#/components/parameters/ReservationId"
+      responses:
+        "200":
+          description: Reservation returned successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReservationResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/reservations/{reservationId}/cancel:
+    post:
+      summary: Cancel a confirmed booking
+      operationId: cancelReservation
+      parameters:
+        - $ref: "#/components/parameters/ReservationId"
+      responses:
+        "200":
+          description: Reservation cancelled successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReservationResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/availability/integrity-check:
+    post:
+      summary: Run a availability integrity check
+      description: Creates a fresh temporary flight and seat, then sends 100 concurrent reservation attempts to verify that only one booking can be stored.
+      operationId: runAvailabilityIntegrityCheck
+      responses:
+        "200":
+          description: Availability check completed successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AvailabilityIntegrityResponse"
+              example:
+                attempts: 100
+                successfulReservations: 1
+                conflicts: 99
+                duplicateReservationsInDatabase: 0
+components:
+  parameters:
+    FlightId:
+      name: flightId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    SeatId:
+      name: seatId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ReservationId:
+      name: reservationId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  responses:
+    ValidationFailed:
+      description: Request validation failed.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: VALIDATION_FAILED
+            message: customerName is required
+    NotFound:
+      description: Flight or seat was not found.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: RESOURCE_NOT_FOUND
+            message: Seat was not found for this flight.
+    SeatAlreadyReserved:
+      description: Seat is already reserved.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: SEAT_ALREADY_RESERVED
+            message: This seat has already been reserved.
+  schemas:
+    FlightResponse:
+      type: object
+      required: [id, flightNumber, origin, destination, departureTime]
+      properties:
+        id:
+          type: string
+          format: uuid
+        flightNumber:
+          type: string
+          example: AL101
+        origin:
+          type: string
+          example: BER
+        destination:
+          type: string
+          example: LIS
+        departureTime:
+          type: string
+          format: date-time
+        airlineCode:
+          type: string
+          example: AF
+        airlineName:
+          type: string
+          example: Air France
+        originAirportName:
+          type: string
+          example: Charles de Gaulle International Airport
+        originCity:
+          type: string
+          example: Paris
+        originCountry:
+          type: string
+          example: France
+        destinationAirportName:
+          type: string
+          example: Amsterdam Airport Schiphol
+        destinationCity:
+          type: string
+          example: Amsterdam
+        destinationCountry:
+          type: string
+          example: Netherlands
+        equipment:
+          type: string
+          example: 321 320
+        basePriceCents:
+          type: integer
+          example: 12900
+    SeatResponse:
+      type: object
+      required: [id, flightId, seatNumber, cabinClass, reserved]
+      properties:
+        id:
+          type: string
+          format: uuid
+        flightId:
+          type: string
+          format: uuid
+        seatNumber:
+          type: string
+          example: 12A
+        cabinClass:
+          type: string
+          example: ECONOMY
+        reserved:
+          type: boolean
+    CreateReservationRequest:
+      type: object
+      required: [customerName]
+      properties:
+        customerName:
+          type: string
+          minLength: 1
+          example: Ziyan Feng
+        customerEmail:
+          type: string
+          format: email
+          example: ziyan@example.com
+        documentNumber:
+          type: string
+          example: P12345678
+        passengerType:
+          type: string
+          enum: [ADULT, STUDENT, CHILD]
+          example: STUDENT
+    ReservationResponse:
+      type: object
+      required: [reservationId, flightId, seatId, customerName, status]
+      properties:
+        reservationId:
+          type: string
+          format: uuid
+        flightId:
+          type: string
+          format: uuid
+        seatId:
+          type: string
+          format: uuid
+        customerName:
+          type: string
+          example: Ziyan Feng
+        customerEmail:
+          type: string
+          format: email
+        documentNumber:
+          type: string
+        passengerType:
+          type: string
+        status:
+          type: string
+          example: CONFIRMED
+        createdAt:
+          type: string
+          format: date-time
+        flightNumber:
+          type: string
+        origin:
+          type: string
+        destination:
+          type: string
+        seatNumber:
+          type: string
+        cabinClass:
+          type: string
+    ErrorResponse:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+    AvailabilityIntegrityResponse:
+      type: object
+      required: [attempts, successfulReservations, conflicts, duplicateReservationsInDatabase]
+      properties:
+        attempts:
+          type: integer
+          example: 100
+        successfulReservations:
+          type: integer
+          example: 1
+        conflicts:
+          type: integer
+          example: 99
+        duplicateReservationsInDatabase:
+          type: integer
+          format: int64
+          example: 0

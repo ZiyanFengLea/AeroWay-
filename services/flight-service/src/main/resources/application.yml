@@ -1,0 +1,19 @@
+spring:
+  application:
+    name: flight-service
+  datasource:
+    url: jdbc:postgresql://localhost:5432/aeroway
+    username: aeroway
+    password: aeroway
+  flyway:
+    enabled: true
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+
+server:
+  port: 8080
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
