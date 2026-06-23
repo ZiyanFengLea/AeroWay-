@@ -1,11 +1,14 @@
 package com.aeroway.flight.controller;
 
+import com.aeroway.flight.dto.ConfirmBookingRequest;
 import com.aeroway.flight.dto.ReservationResponse;
 import com.aeroway.flight.service.FlightService;
+import jakarta.validation.Valid;
 import java.util.UUID;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -27,5 +30,13 @@ public class ReservationController {
     @PostMapping("/{reservationId}/cancel")
     public ReservationResponse cancelReservation(@PathVariable UUID reservationId) {
         return flightService.cancelReservation(reservationId);
+    }
+
+    @PostMapping("/{reservationId}/confirm")
+    public ReservationResponse confirmBooking(
+            @PathVariable UUID reservationId,
+            @Valid @RequestBody ConfirmBookingRequest request
+    ) {
+        return flightService.confirmBooking(reservationId, request);
     }
 }

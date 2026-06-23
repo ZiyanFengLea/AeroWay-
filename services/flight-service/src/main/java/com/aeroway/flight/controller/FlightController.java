@@ -1,6 +1,7 @@
 package com.aeroway.flight.controller;
 
 import com.aeroway.flight.dto.CreateReservationRequest;
+import com.aeroway.flight.dto.CreateSeatHoldRequest;
 import com.aeroway.flight.dto.FlightResponse;
 import com.aeroway.flight.dto.ReservationResponse;
 import com.aeroway.flight.dto.SeatResponse;
@@ -79,6 +80,17 @@ public class FlightController {
                 response.reservationId()
         ));
 
+        return ResponseEntity.created(location).body(response);
+    }
+
+    @PostMapping("/{flightId}/seats/{seatId}/holds")
+    public ResponseEntity<ReservationResponse> holdSeat(
+            @PathVariable UUID flightId,
+            @PathVariable UUID seatId,
+            @Valid @RequestBody CreateSeatHoldRequest request
+    ) {
+        ReservationResponse response = flightService.holdSeat(flightId, seatId, request);
+        URI location = URI.create("/api/reservations/%s".formatted(response.reservationId()));
         return ResponseEntity.created(location).body(response);
     }
 }

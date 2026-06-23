@@ -136,7 +136,13 @@ public class FlightRepository {
                               FROM seat_reservations confirmed_reservation
                               WHERE confirmed_reservation.flight_id = f.id
                                 AND confirmed_reservation.seat_id = available_seat.id
-                                AND confirmed_reservation.status = 'CONFIRMED'
+                                AND (
+                                    confirmed_reservation.status = 'CONFIRMED'
+                                    OR (
+                                        confirmed_reservation.status = 'HELD'
+                                        AND confirmed_reservation.hold_expires_at > now()
+                                    )
+                                )
                           )
                     ) AS available_seat_count,
                     CASE

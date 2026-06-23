@@ -17,8 +17,48 @@ public record SeatReservation(
         String origin,
         String destination,
         String seatNumber,
-        String cabinClass
+        String cabinClass,
+        OffsetDateTime holdExpiresAt,
+        String bookingReference,
+        String paymentStatus
 ) {
+    public SeatReservation(
+            UUID id,
+            UUID flightId,
+            UUID seatId,
+            String customerName,
+            String customerEmail,
+            String documentNumber,
+            String passengerType,
+            String status,
+            OffsetDateTime createdAt,
+            String flightNumber,
+            String origin,
+            String destination,
+            String seatNumber,
+            String cabinClass
+    ) {
+        this(
+                id,
+                flightId,
+                seatId,
+                customerName,
+                customerEmail,
+                documentNumber,
+                passengerType,
+                status,
+                createdAt,
+                flightNumber,
+                origin,
+                destination,
+                seatNumber,
+                cabinClass,
+                null,
+                null,
+                null
+        );
+    }
+
     public SeatReservation(
             UUID id,
             UUID flightId,
@@ -37,6 +77,9 @@ public record SeatReservation(
                 "ADULT",
                 status,
                 createdAt,
+                null,
+                null,
+                null,
                 null,
                 null,
                 null,

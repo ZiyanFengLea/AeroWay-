@@ -73,6 +73,42 @@ export function reserveSeat(
   });
 }
 
+export function holdSeat(
+  flightId: string,
+  seatId: string,
+  customerName: string,
+  customerEmail: string,
+  documentNumber: string,
+  passengerType: string
+): Promise<ReservationResponse> {
+  return request<ReservationResponse>(`/api/flights/${flightId}/seats/${seatId}/holds`, {
+    method: "POST",
+    body: JSON.stringify({ customerName, customerEmail, documentNumber, passengerType }),
+  });
+}
+
+export function confirmBooking(
+  reservationId: string,
+  idempotencyKey: string,
+  simulatePaymentFailure: boolean,
+  customerName: string,
+  customerEmail: string,
+  documentNumber: string,
+  passengerType: string
+): Promise<ReservationResponse> {
+  return request<ReservationResponse>(`/api/reservations/${reservationId}/confirm`, {
+    method: "POST",
+    body: JSON.stringify({
+      idempotencyKey,
+      simulatePaymentFailure,
+      customerName,
+      customerEmail,
+      documentNumber,
+      passengerType,
+    }),
+  });
+}
+
 export function cancelReservation(reservationId: string): Promise<ReservationResponse> {
   return request<ReservationResponse>(`/api/reservations/${reservationId}/cancel`, {
     method: "POST",

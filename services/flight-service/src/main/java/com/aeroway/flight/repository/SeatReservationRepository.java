@@ -25,40 +25,22 @@ public class SeatReservationRepository {
             String documentNumber,
             String passengerType
     ) {
-        return jdbcTemplate.queryForObject("""
-                WITH inserted_reservation AS (
-                    INSERT INTO seat_reservations (
-                        flight_id,
-                        seat_id,
-                        customer_name,
-                        customer_email,
-                        document_number,
-                        passenger_type,
-                        status
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, 'CONFIRMED')
-                    RETURNING id
+        UUID reservationId = jdbcTemplate.queryForObject("""
+                INSERT INTO seat_reservations (
+                    flight_id,
+                    seat_id,
+                    customer_name,
+                    customer_email,
+                    document_number,
+                    passenger_type,
+                    status,
+                    payment_status,
+                    booking_reference
                 )
-                SELECT
-                    sr.id,
-                    sr.flight_id,
-                    sr.seat_id,
-                    sr.customer_name,
-                    sr.customer_email,
-                    sr.document_number,
-                    sr.passenger_type,
-                    sr.status,
-                    sr.created_at,
-                    f.flight_number,
-                    f.origin,
-                    f.destination,
-                    s.seat_number,
-                    s.cabin_class
-                FROM seat_reservations sr
-                JOIN inserted_reservation ir ON ir.id = sr.id
-                JOIN flights f ON f.id = sr.flight_id
-                JOIN seats s ON s.id = sr.seat_id
-                """, this::mapReservation, flightId, seatId, customerName, customerEmail, documentNumber, passengerType);
+                VALUES (?, ?, ?, ?, ?, ?, 'CONFIRMED', 'PAID', 'AW-' || upper(substr(gen_random_uuid()::text, 1, 8)))
+                RETURNING id
+                """, UUID.class, flightId, seatId, customerName, customerEmail, documentNumber, passengerType);
+        return findById(reservationId).orElseThrow();
     }
 
     public SeatReservation create(UUID flightId, UUID seatId, String customerName) {
@@ -77,25 +59,7 @@ public class SeatReservationRepository {
     }
 
     public Optional<SeatReservation> findByFlightIdAndSeatId(UUID flightId, UUID seatId) {
-        return jdbcTemplate.query("""
-                SELECT
-                    sr.id,
-                    sr.flight_id,
-                    sr.seat_id,
-                    sr.customer_name,
-                    sr.customer_email,
-                    sr.document_number,
-                    sr.passenger_type,
-                    sr.status,
-                    sr.created_at,
-                    f.flight_number,
-                    f.origin,
-                    f.destination,
-                    s.seat_number,
-                    s.cabin_class
-                FROM seat_reservations sr
-                JOIN flights f ON f.id = sr.flight_id
-                JOIN seats s ON s.id = sr.seat_id
+        return jdbcTemplate.query(selectReservationSql() + """
                 WHERE sr.flight_id = ?
                   AND sr.seat_id = ?
                   AND sr.status = 'CONFIRMED'
@@ -103,39 +67,128 @@ public class SeatReservationRepository {
     }
 
     public Optional<SeatReservation> findById(UUID reservationId) {
-        return jdbcTemplate.query("""
-                SELECT
-                    sr.id,
-                    sr.flight_id,
-                    sr.seat_id,
-                    sr.customer_name,
-                    sr.customer_email,
-                    sr.document_number,
-                    sr.passenger_type,
-                    sr.status,
-                    sr.created_at,
-                    f.flight_number,
-                    f.origin,
-                    f.destination,
-                    s.seat_number,
-                    s.cabin_class
-                FROM seat_reservations sr
-                JOIN flights f ON f.id = sr.flight_id
-                JOIN seats s ON s.id = sr.seat_id
+        return jdbcTemplate.query(selectReservationSql() + """
                 WHERE sr.id = ?
                 """, this::mapReservation, reservationId).stream().findFirst();
     }
 
-    public Optional<SeatReservation> cancel(UUID reservationId) {
-        return jdbcTemplate.query("""
-                WITH updated_reservation AS (
-                    UPDATE seat_reservations
-                    SET status = 'CANCELLED',
-                        updated_at = now()
-                    WHERE id = ?
-                      AND status = 'CONFIRMED'
-                    RETURNING id
+    public Optional<SeatReservation> findByConfirmIdempotencyKey(String idempotencyKey) {
+        return jdbcTemplate.query(selectReservationSql() + """
+                WHERE sr.confirm_idempotency_key = ?
+                """, this::mapReservation, idempotencyKey).stream().findFirst();
+    }
+
+    public SeatReservation hold(
+            UUID flightId,
+            UUID seatId,
+            String customerName,
+            String customerEmail,
+            String documentNumber,
+            String passengerType
+    ) {
+        UUID reservationId = jdbcTemplate.queryForObject("""
+                INSERT INTO seat_reservations (
+                    flight_id,
+                    seat_id,
+                    customer_name,
+                    customer_email,
+                    document_number,
+                    passenger_type,
+                    status,
+                    hold_expires_at,
+                    payment_status
                 )
+                VALUES (?, ?, ?, ?, ?, ?, 'HELD', now() + interval '5 minutes', 'PENDING')
+                RETURNING id
+                """, UUID.class, flightId, seatId, customerName, customerEmail, documentNumber, passengerType);
+        return findById(reservationId).orElseThrow();
+    }
+
+    public Optional<SeatReservation> confirm(UUID reservationId, String idempotencyKey) {
+        UUID updatedId = jdbcTemplate.query("""
+                UPDATE seat_reservations
+                SET status = 'CONFIRMED',
+                    payment_status = 'PAID',
+                    confirm_idempotency_key = ?,
+                    booking_reference = COALESCE(booking_reference, 'AW-' || upper(substr(gen_random_uuid()::text, 1, 8))),
+                    updated_at = now()
+                WHERE id = ?
+                  AND status = 'HELD'
+                  AND hold_expires_at > now()
+                RETURNING id
+                """, (rs, rowNum) -> rs.getObject("id", UUID.class), idempotencyKey, reservationId)
+                .stream()
+                .findFirst()
+                .orElse(null);
+        return updatedId == null ? Optional.empty() : findById(updatedId);
+    }
+
+    public void updatePassengerDetails(
+            UUID reservationId,
+            String customerName,
+            String customerEmail,
+            String documentNumber,
+            String passengerType
+    ) {
+        jdbcTemplate.update("""
+                UPDATE seat_reservations
+                SET customer_name = ?,
+                    customer_email = ?,
+                    document_number = ?,
+                    passenger_type = ?,
+                    updated_at = now()
+                WHERE id = ?
+                  AND status = 'HELD'
+                  AND hold_expires_at > now()
+                """, customerName, customerEmail, documentNumber, passengerType, reservationId);
+    }
+
+    public Optional<SeatReservation> failPayment(UUID reservationId, String idempotencyKey) {
+        UUID updatedId = jdbcTemplate.query("""
+                UPDATE seat_reservations
+                SET status = 'PAYMENT_FAILED',
+                    payment_status = 'FAILED',
+                    confirm_idempotency_key = ?,
+                    updated_at = now()
+                WHERE id = ?
+                  AND status = 'HELD'
+                  AND hold_expires_at > now()
+                RETURNING id
+                """, (rs, rowNum) -> rs.getObject("id", UUID.class), idempotencyKey, reservationId)
+                .stream()
+                .findFirst()
+                .orElse(null);
+        return updatedId == null ? Optional.empty() : findById(updatedId);
+    }
+
+    public int expireOldHolds() {
+        return jdbcTemplate.update("""
+                UPDATE seat_reservations
+                SET status = 'EXPIRED',
+                    payment_status = 'EXPIRED',
+                    updated_at = now()
+                WHERE status = 'HELD'
+                  AND hold_expires_at <= now()
+                """);
+    }
+
+    public Optional<SeatReservation> cancel(UUID reservationId) {
+        UUID updatedId = jdbcTemplate.query("""
+                UPDATE seat_reservations
+                SET status = 'CANCELLED',
+                    updated_at = now()
+                WHERE id = ?
+                  AND status = 'CONFIRMED'
+                RETURNING id
+                """, (rs, rowNum) -> rs.getObject("id", UUID.class), reservationId)
+                .stream()
+                .findFirst()
+                .orElse(null);
+        return updatedId == null ? Optional.empty() : findById(updatedId);
+    }
+
+    private String selectReservationSql() {
+        return """
                 SELECT
                     sr.id,
                     sr.flight_id,
@@ -150,12 +203,14 @@ public class SeatReservationRepository {
                     f.origin,
                     f.destination,
                     s.seat_number,
-                    s.cabin_class
+                    s.cabin_class,
+                    sr.hold_expires_at,
+                    sr.booking_reference,
+                    sr.payment_status
                 FROM seat_reservations sr
-                JOIN updated_reservation ur ON ur.id = sr.id
                 JOIN flights f ON f.id = sr.flight_id
                 JOIN seats s ON s.id = sr.seat_id
-                """, this::mapReservation, reservationId).stream().findFirst();
+                """;
     }
 
     private SeatReservation mapReservation(ResultSet rs, int rowNum) throws SQLException {
@@ -173,7 +228,10 @@ public class SeatReservationRepository {
                 rs.getString("origin"),
                 rs.getString("destination"),
                 rs.getString("seat_number"),
-                rs.getString("cabin_class")
+                rs.getString("cabin_class"),
+                rs.getObject("hold_expires_at", java.time.OffsetDateTime.class),
+                rs.getString("booking_reference"),
+                rs.getString("payment_status")
         );
     }
 }

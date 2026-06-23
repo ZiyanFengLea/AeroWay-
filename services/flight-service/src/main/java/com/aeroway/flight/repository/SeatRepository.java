@@ -29,7 +29,10 @@ public class SeatRepository {
                         FROM seat_reservations sr
                         WHERE sr.flight_id = s.flight_id
                           AND sr.seat_id = s.id
-                          AND sr.status = 'CONFIRMED'
+                          AND (
+                              sr.status = 'CONFIRMED'
+                              OR (sr.status = 'HELD' AND sr.hold_expires_at > now())
+                          )
                     ) AS reserved
                 FROM seats s
                 WHERE s.flight_id = ?

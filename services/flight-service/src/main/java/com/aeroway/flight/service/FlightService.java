@@ -1,11 +1,14 @@
 package com.aeroway.flight.service;
 
+import com.aeroway.flight.dto.ConfirmBookingRequest;
+import com.aeroway.flight.dto.CreateSeatHoldRequest;
 import com.aeroway.flight.dto.CreateReservationRequest;
 import com.aeroway.flight.dto.FlightResponse;
 import com.aeroway.flight.dto.ReservationResponse;
 import com.aeroway.flight.dto.SeatResponse;
 import com.aeroway.flight.exception.ResourceNotFoundException;
 import com.aeroway.flight.exception.SeatAlreadyReservedException;
+import com.aeroway.flight.exception.SeatHoldExpiredException;
 import com.aeroway.flight.model.Flight;
 import com.aeroway.flight.model.FlightSearchCriteria;
 import com.aeroway.flight.model.SeatReservation;
@@ -77,13 +80,50 @@ public class FlightService {
     }
 
     @Transactional
+    public ReservationResponse holdSeat(UUID flightId, UUID seatId, CreateSeatHoldRequest request) {
+        validateFlightAndSeat(flightId, seatId);
+        reservationRepository.expireOldHolds();
+
+        try {
+            SeatReservation reservation = reservationRepository.hold(
+                    flightId,
+                    seatId,
+                    request.customerName().trim(),
+                    clean(request.customerEmail()),
+                    clean(request.documentNumber()),
+                    normalizePassengerType(request.passengerType())
+            );
+            return toReservationResponse(reservation);
+        } catch (DuplicateKeyException exception) {
+            throw new SeatAlreadyReservedException();
+        }
+    }
+
+    @Transactional
+    public ReservationResponse confirmBooking(UUID reservationId, ConfirmBookingRequest request) {
+        reservationRepository.expireOldHolds();
+        String idempotencyKey = request.idempotencyKey().trim();
+
+        return reservationRepository.findByConfirmIdempotencyKey(idempotencyKey)
+                .map(this::toReservationResponse)
+                .orElseGet(() -> {
+                    if (request.customerName() != null && !request.customerName().isBlank()) {
+                        reservationRepository.updatePassengerDetails(
+                                reservationId,
+                                request.customerName().trim(),
+                                clean(request.customerEmail()),
+                                clean(request.documentNumber()),
+                                normalizePassengerType(request.passengerType())
+                        );
+                    }
+                    return completeBooking(reservationId, idempotencyKey, request.simulatePaymentFailure());
+                });
+    }
+
+    @Transactional
     public ReservationResponse reserveSeat(UUID flightId, UUID seatId, CreateReservationRequest request) {
-        if (!flightRepository.existsById(flightId)) {
-            throw new ResourceNotFoundException("Flight was not found.");
-        }
-        if (!seatRepository.existsByIdAndFlightId(seatId, flightId)) {
-            throw new ResourceNotFoundException("Seat was not found for this flight.");
-        }
+        validateFlightAndSeat(flightId, seatId);
+        reservationRepository.expireOldHolds();
 
         try {
             SeatReservation reservation = reservationRepository.create(
@@ -161,8 +201,34 @@ public class FlightService {
                 reservation.origin(),
                 reservation.destination(),
                 reservation.seatNumber(),
-                reservation.cabinClass()
+                reservation.cabinClass(),
+                reservation.holdExpiresAt(),
+                reservation.bookingReference(),
+                reservation.paymentStatus()
         );
+    }
+
+    private ReservationResponse completeBooking(UUID reservationId, String idempotencyKey, boolean simulatePaymentFailure) {
+        try {
+            return (simulatePaymentFailure
+                    ? reservationRepository.failPayment(reservationId, idempotencyKey)
+                    : reservationRepository.confirm(reservationId, idempotencyKey))
+                    .map(this::toReservationResponse)
+                    .orElseThrow(SeatHoldExpiredException::new);
+        } catch (DuplicateKeyException exception) {
+            return reservationRepository.findByConfirmIdempotencyKey(idempotencyKey)
+                    .map(this::toReservationResponse)
+                    .orElseThrow(() -> exception);
+        }
+    }
+
+    private void validateFlightAndSeat(UUID flightId, UUID seatId) {
+        if (!flightRepository.existsById(flightId)) {
+            throw new ResourceNotFoundException("Flight was not found.");
+        }
+        if (!seatRepository.existsByIdAndFlightId(seatId, flightId)) {
+            throw new ResourceNotFoundException("Seat was not found for this flight.");
+        }
     }
 
     private String clean(String value) {

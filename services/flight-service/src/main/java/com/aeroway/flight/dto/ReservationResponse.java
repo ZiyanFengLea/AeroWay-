@@ -17,6 +17,9 @@ public record ReservationResponse(
         String origin,
         String destination,
         String seatNumber,
-        String cabinClass
+        String cabinClass,
+        OffsetDateTime holdExpiresAt,
+        String bookingReference,
+        String paymentStatus
 ) {
 }

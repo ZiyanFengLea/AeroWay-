@@ -3,9 +3,10 @@ import type { FormEvent, ReactNode } from "react";
 import {
   ApiError,
   cancelReservation,
+  confirmBooking,
   fetchFlights,
   fetchSeats,
-  reserveSeat,
+  holdSeat,
   runAvailabilityIntegrityCheck,
 } from "./api";
 import type {
@@ -84,7 +85,10 @@ export function App() {
   const [loadingFlights, setLoadingFlights] = useState(true);
   const [loadingSeats, setLoadingSeats] = useState(false);
   const [reserving, setReserving] = useState(false);
+  const [holdingSeat, setHoldingSeat] = useState(false);
   const [runningIntegrityCheck, setRunningIntegrityCheck] = useState(false);
+  const [confirmIdempotencyKey, setConfirmIdempotencyKey] = useState(() => createIdempotencyKey());
+  const [simulatePaymentFailure, setSimulatePaymentFailure] = useState(false);
 
   useEffect(() => {
     loadFlights("search");
@@ -220,24 +224,57 @@ export function App() {
     setStep("seats");
   }
 
-  function chooseSeat(seat: SeatResponse) {
+  async function chooseSeat(seat: SeatResponse) {
+    if (!selectedFlight) {
+      return;
+    }
+
+    setHoldingSeat(true);
     setSelectedSeat(seat);
     setStatusMessage("");
-    setStep("passenger");
+    setReservation(null);
+    try {
+      const hold = await holdSeat(
+        selectedFlight.id,
+        seat.id,
+        customerName,
+        customerEmail,
+        documentNumber,
+        passengerType
+      );
+      setReservation(hold);
+      setConfirmIdempotencyKey(createIdempotencyKey());
+      setStatusMessage(`Seat ${seat.seatNumber} is held for 5 minutes while you complete booking.`);
+      await loadSeats(selectedFlight.id);
+      setStep("passenger");
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 409) {
+        setStatusMessage("This seat is no longer available. Please choose another seat.");
+        await loadSeats(selectedFlight.id);
+      } else if (error instanceof ApiError) {
+        setStatusMessage(`Seat hold could not be created (${error.status}). ${error.message}`);
+      } else {
+        setStatusMessage("Seat hold could not be created. Please try again.");
+      }
+      setSelectedSeat(null);
+    } finally {
+      setHoldingSeat(false);
+    }
   }
 
   async function submitReservation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selectedFlight || !selectedSeat) {
+    if (!selectedFlight || !selectedSeat || !reservation) {
       return;
     }
 
     setReserving(true);
     setStatusMessage("");
     try {
-      const response = await reserveSeat(
-        selectedFlight.id,
-        selectedSeat.id,
+      const response = await confirmBooking(
+        reservation.reservationId,
+        confirmIdempotencyKey,
+        simulatePaymentFailure,
         customerName,
         customerEmail,
         documentNumber,
@@ -248,7 +285,7 @@ export function App() {
       setStep("confirmation");
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
-        setStatusMessage("This seat has already been reserved. Please choose another seat.");
+        setStatusMessage("This seat hold expired or was no longer available. Please choose another seat.");
         await loadSeats(selectedFlight.id);
         setStep("seats");
       } else {
@@ -291,6 +328,8 @@ export function App() {
     setSelectedSeat(null);
     setReservation(null);
     setStatusMessage("");
+    setConfirmIdempotencyKey(createIdempotencyKey());
+    setSimulatePaymentFailure(false);
     setStep("search");
   }
 
@@ -506,8 +545,8 @@ export function App() {
                         <span>{seat.cabinClass}</span>
                       </div>
                       <p>{seat.reserved ? "Reserved" : "Available"}</p>
-                      <button disabled={seat.reserved} onClick={() => chooseSeat(seat)}>
-                        Choose seat
+                      <button disabled={seat.reserved || holdingSeat} onClick={() => chooseSeat(seat)}>
+                        {holdingSeat && selectedSeat?.id === seat.id ? "Holding..." : "Choose seat"}
                       </button>
                     </article>
                   ))}
@@ -537,6 +576,9 @@ export function App() {
                   </span>
                   <span>{formatDate(selectedFlight.departureTime)}</span>
                   <span>{selectedSeat.cabinClass}</span>
+                  {reservation?.holdExpiresAt && (
+                    <span>Held until {formatDate(reservation.holdExpiresAt)}</span>
+                  )}
                   <strong>
                     {selectedFlight.basePriceCents
                       ? formatPrice(selectedFlight.basePriceCents)
@@ -580,9 +622,22 @@ export function App() {
                       <option value="CHILD">Child</option>
                     </select>
                   </Field>
+                  <label className="checkbox-row payment-option" htmlFor="simulatePaymentFailure">
+                    <input
+                      checked={simulatePaymentFailure}
+                      id="simulatePaymentFailure"
+                      type="checkbox"
+                      onChange={(event) => setSimulatePaymentFailure(event.target.checked)}
+                    />
+                    Simulate payment failure
+                  </label>
+                  <p className="muted">
+                    Complete booking uses an idempotency key, so retrying this request returns the
+                    same booking result instead of creating a duplicate order.
+                  </p>
                   <div className="step-actions">
                     <button className="primary" disabled={reserving} type="submit">
-                      {reserving ? "Confirming..." : "Confirm booking"}
+                      {reserving ? "Processing payment..." : "Complete booking"}
                     </button>
                   </div>
                 </form>
@@ -604,7 +659,11 @@ export function App() {
               <dl className="detail-grid">
                 <div>
                   <dt>Booking number</dt>
-                  <dd>{reservation.reservationId}</dd>
+                  <dd>{reservation.bookingReference ?? reservation.reservationId}</dd>
+                </div>
+                <div>
+                  <dt>Payment</dt>
+                  <dd>{reservation.paymentStatus ?? "N/A"}</dd>
                 </div>
                 <div>
                   <dt>Flight</dt>
@@ -632,6 +691,12 @@ export function App() {
                   <dt>Created</dt>
                   <dd>{formatDate(reservation.createdAt)}</dd>
                 </div>
+                {reservation.holdExpiresAt && reservation.status === "HELD" && (
+                  <div>
+                    <dt>Hold expires</dt>
+                    <dd>{formatDate(reservation.holdExpiresAt)}</dd>
+                  </div>
+                )}
               </dl>
               <div className="step-actions">
                 {reservation.status === "CONFIRMED" && (
@@ -827,4 +892,8 @@ function getTomorrowDate() {
   const date = new Date();
   date.setDate(date.getDate() + 1);
   return date.toISOString().slice(0, 10);
+}
+
+function createIdempotencyKey() {
+  return `booking-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }

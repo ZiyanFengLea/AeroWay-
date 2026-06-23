@@ -41,6 +41,9 @@ export type ReservationResponse = {
   destination: string;
   seatNumber: string;
   cabinClass: string;
+  holdExpiresAt?: string;
+  bookingReference?: string;
+  paymentStatus?: string;
 };
 
 export type ErrorResponse = {
