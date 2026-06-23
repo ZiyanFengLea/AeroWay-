@@ -14,6 +14,8 @@ export type FlightResponse = {
   destinationCountry?: string;
   equipment?: string;
   basePriceCents?: number;
+  availableSeatCount?: number;
+  durationMinutes?: number;
 };
 
 export type SeatResponse = {
