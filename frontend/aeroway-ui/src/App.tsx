@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import {
   ApiError,
@@ -21,6 +21,15 @@ type UserProfile = {
   email: string;
   documentNumber: string;
   passengerType: string;
+};
+type FlightRecommendation = {
+  flight: FlightResponse;
+  reasons: string[];
+};
+type SeatRecommendation = {
+  seat: SeatResponse;
+  label: string;
+  reason: string;
 };
 
 const defaultUserProfile: UserProfile = {
@@ -91,6 +100,7 @@ const airlineOptions = [
 ] as const;
 
 export function App() {
+  const [showWelcome, setShowWelcome] = useState(true);
   const [view, setView] = useState<AppView>("booking");
   const [step, setStep] = useState<BookingStep>("search");
   const [flights, setFlights] = useState<FlightResponse[]>([]);
@@ -135,6 +145,19 @@ export function App() {
     () => seats.filter((seat) => !seat.reserved).length,
     [seats]
   );
+  const recommendedFlight = useMemo(
+    () =>
+      recommendFlight(flights, {
+        departureTimeFrom,
+        destination,
+        directOnly,
+        origin,
+        viewedFlights,
+      }),
+    [departureTimeFrom, destination, directOnly, flights, origin, viewedFlights]
+  );
+  const seatRecommendations = useMemo(() => recommendSeats(seats), [seats]);
+  const recommendedSeat = seatRecommendations[0] ?? null;
 
   async function loadFlights(nextStep: BookingStep = "flights") {
     setLoadingFlights(true);
@@ -396,6 +419,10 @@ export function App() {
     setStep("search");
   }
 
+  if (showWelcome) {
+    return <WelcomeScreen onEnter={() => setShowWelcome(false)} />;
+  }
+
   return (
     <main className="app-shell">
       <header className="site-header">
@@ -581,11 +608,18 @@ export function App() {
               </div>
               {loadingFlights ? (
                 <p className="muted">Loading flights...</p>
-              ) : (
+	              ) : (
 	                <div className="flight-list">
+	                  {recommendedFlight && (
+	                    <RecommendedFlightCard
+	                      recommendation={recommendedFlight}
+	                      onChoose={chooseFlight}
+	                    />
+	                  )}
 	                  {flights.map((flight) => (
 	                    <FlightRow
 	                      flight={flight}
+	                      isRecommended={recommendedFlight?.flight.id === flight.id}
 	                      isFavorite={isFavoriteFlight(flight.id)}
 	                      key={flight.id}
 	                      onChoose={chooseFlight}
@@ -596,9 +630,9 @@ export function App() {
                     <p className="muted">No flights match your current search.</p>
                   )}
                 </div>
-              )}
-            </section>
-          )}
+	              )}
+	            </section>
+	          )}
 
           {step === "seats" && selectedFlight && (
             <section className="booking-card">
@@ -610,18 +644,28 @@ export function App() {
                 <button type="button" onClick={() => setStep("flights")}>
                   Change flight
                 </button>
-              </div>
-              <FlightDetails flight={selectedFlight} availableSeatCount={availableSeatCount} />
-              {loadingSeats ? (
-                <p className="muted">Loading seats...</p>
-              ) : (
-                <div className="seat-grid">
-                  {seats.map((seat) => (
-                    <article className={`seat-card ${seat.reserved ? "reserved" : ""}`} key={seat.id}>
-                      <div>
-                        <strong>{seat.seatNumber}</strong>
-                        <span>{seat.cabinClass}</span>
-                      </div>
+	              </div>
+	              <FlightDetails flight={selectedFlight} availableSeatCount={availableSeatCount} />
+	              {recommendedSeat && (
+	                <RecommendedSeatCard recommendation={recommendedSeat} onChoose={chooseSeat} />
+	              )}
+	              {loadingSeats ? (
+	                <p className="muted">Loading seats...</p>
+	              ) : (
+	                <div className="seat-grid">
+	                  {seats.map((seat) => (
+	                    <article className={`seat-card ${seat.reserved ? "reserved" : ""}`} key={seat.id}>
+	                      <div>
+	                        <strong>
+	                          {seat.seatNumber}
+	                          {seatRecommendations.find((item) => item.seat.id === seat.id) && (
+	                            <span className="seat-tag">
+	                              {seatRecommendations.find((item) => item.seat.id === seat.id)?.label}
+	                            </span>
+	                          )}
+	                        </strong>
+	                        <span>{seat.cabinClass}</span>
+	                      </div>
                       <p>{seat.reserved ? "Reserved" : "Available"}</p>
                       <button disabled={seat.reserved || holdingSeat} onClick={() => chooseSeat(seat)}>
                         {holdingSeat && selectedSeat?.id === seat.id ? "Holding..." : "Choose seat"}
@@ -793,24 +837,97 @@ export function App() {
 	      </section>
 	      )}
 	    </main>
-	  );
+  );
+}
+
+function WelcomeScreen({ onEnter }: { onEnter: () => void }) {
+  const [entering, setEntering] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const stopAmbienceRef = useRef<(() => void) | null>(null);
+
+  function enterBooking() {
+    setEntering(true);
+    if (soundEnabled) {
+      stopAmbienceRef.current = startOceanAmbience();
+    }
+
+    window.setTimeout(() => {
+      stopAmbienceRef.current?.();
+      onEnter();
+    }, 1500);
+  }
+
+  return (
+    <main className="welcome-screen">
+      <video
+        aria-label="Ocean waves"
+        autoPlay
+        className="welcome-video"
+        loop
+        muted
+        playsInline
+        poster="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1800&q=80"
+      >
+        <source src="/media/ocean.mp4" type="video/mp4" />
+        <source
+          src="https://assets.mixkit.co/videos/preview/mixkit-waves-in-the-water-1164-large.mp4"
+          type="video/mp4"
+        />
+      </video>
+      <div className="welcome-tint" />
+      <section className={`welcome-content ${entering ? "is-entering" : ""}`}>
+        <p className="welcome-kicker">AeroWay</p>
+        <h1>Plan your next escape by the sea.</h1>
+        <p>
+          Search flights, hold your seat, and complete your booking with a calm, reliable travel
+          experience.
+        </p>
+        <div className="welcome-actions">
+          <button className="primary welcome-primary" disabled={entering} type="button" onClick={enterBooking}>
+            {entering ? "Preparing your trip..." : "Enter booking"}
+          </button>
+          <button
+            className="welcome-sound"
+            disabled={entering}
+            type="button"
+            onClick={() => setSoundEnabled((current) => !current)}
+          >
+            {soundEnabled ? "Wave sound on" : "Wave sound off"}
+          </button>
+        </div>
+        <div className="welcome-progress" aria-hidden={!entering}>
+          <span />
+        </div>
+      </section>
+      <div className="wave-line" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </div>
+    </main>
+  );
 }
 
 function FlightRow({
   flight,
   isFavorite,
+  isRecommended,
   onChoose,
   onToggleFavorite,
 }: {
   flight: FlightResponse;
   isFavorite: boolean;
+  isRecommended: boolean;
   onChoose: (flight: FlightResponse) => void;
   onToggleFavorite: (flight: FlightResponse) => void;
 }) {
   return (
-    <article className="flight-row">
+    <article className={`flight-row ${isRecommended ? "recommended" : ""}`}>
       <div className="flight-main">
-        <strong>{flight.flightNumber}</strong>
+        <strong>
+          {flight.flightNumber}
+          {isRecommended && <span className="flight-tag">Recommended</span>}
+        </strong>
         <span>{flight.airlineName ?? "AeroWay Partner"}</span>
       </div>
       <span className="route-line">
@@ -833,6 +950,65 @@ function FlightRow({
           Select flight
         </button>
       </div>
+    </article>
+  );
+}
+
+function RecommendedFlightCard({
+  onChoose,
+  recommendation,
+}: {
+  onChoose: (flight: FlightResponse) => void;
+  recommendation: FlightRecommendation;
+}) {
+  const { flight, reasons } = recommendation;
+
+  return (
+    <article className="recommendation-card flight-recommendation">
+      <div>
+        <p className="eyebrow">Recommended for you</p>
+        <h3>{flight.flightNumber}</h3>
+        <strong>
+          {flight.origin} to {flight.destination}
+        </strong>
+        <span>
+          {flight.basePriceCents ? formatPrice(flight.basePriceCents) : "Price pending"}
+          {flight.durationMinutes ? ` · ${formatDuration(flight.durationMinutes)}` : ""}
+        </span>
+      </div>
+      <div>
+        <p className="recommendation-title">Why recommended</p>
+        <ul className="reason-list">
+          {reasons.map((reason) => (
+            <li key={reason}>{reason}</li>
+          ))}
+        </ul>
+      </div>
+      <button className="primary" type="button" onClick={() => onChoose(flight)}>
+        Select recommended flight
+      </button>
+    </article>
+  );
+}
+
+function RecommendedSeatCard({
+  onChoose,
+  recommendation,
+}: {
+  onChoose: (seat: SeatResponse) => void;
+  recommendation: SeatRecommendation;
+}) {
+  return (
+    <article className="recommendation-card seat-recommendation">
+      <div>
+        <p className="eyebrow">Recommended seat</p>
+        <h3>{recommendation.seat.seatNumber}</h3>
+        <span>{recommendation.seat.cabinClass}</span>
+      </div>
+      <p>{recommendation.reason}</p>
+      <button className="primary" type="button" onClick={() => onChoose(recommendation.seat)}>
+        Choose recommended seat
+      </button>
     </article>
   );
 }
@@ -1180,6 +1356,213 @@ function getTomorrowDate() {
 
 function createIdempotencyKey() {
   return `booking-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function recommendFlight(
+  flights: FlightResponse[],
+  preferences: {
+    departureTimeFrom: string;
+    destination: string;
+    directOnly: boolean;
+    origin: string;
+    viewedFlights: FlightResponse[];
+  }
+): FlightRecommendation | null {
+  if (flights.length === 0) {
+    return null;
+  }
+
+  const prices = flights.map((flight) => flight.basePriceCents ?? Number.MAX_SAFE_INTEGER);
+  const durations = flights.map((flight) => flight.durationMinutes ?? Number.MAX_SAFE_INTEGER);
+  const seats = flights.map((flight) => flight.availableSeatCount ?? 0);
+  const minPrice = Math.min(...prices);
+  const minDuration = Math.min(...durations);
+  const maxSeats = Math.max(...seats);
+  const recentlyViewedRoute = preferences.viewedFlights.find(Boolean);
+
+  const scoredFlights = flights.map((flight) => {
+    let score = 0;
+    const reasons: string[] = [];
+
+    if ((flight.basePriceCents ?? Number.MAX_SAFE_INTEGER) === minPrice) {
+      score += 34;
+      reasons.push("Best price among available flights");
+    }
+
+    if ((flight.durationMinutes ?? Number.MAX_SAFE_INTEGER) === minDuration) {
+      score += 24;
+      reasons.push("Fastest route in this result set");
+    }
+
+    if ((flight.availableSeatCount ?? 0) === maxSeats && maxSeats > 0) {
+      score += 22;
+      reasons.push(`${maxSeats} seats still available`);
+    } else if ((flight.availableSeatCount ?? 0) >= 10) {
+      score += 12;
+      reasons.push(`${flight.availableSeatCount} seats still available`);
+    }
+
+    if (preferences.directOnly) {
+      score += 8;
+      reasons.push("Direct route");
+    }
+
+    if (
+      recentlyViewedRoute &&
+      recentlyViewedRoute.origin === flight.origin &&
+      recentlyViewedRoute.destination === flight.destination
+    ) {
+      score += 10;
+      reasons.push("Matches a route you recently viewed");
+    } else if (flight.origin === preferences.origin && flight.destination === preferences.destination) {
+      score += 8;
+      reasons.push("Matches your selected route");
+    }
+
+    if (preferences.departureTimeFrom && isNearPreferredDeparture(flight, preferences.departureTimeFrom)) {
+      score += 8;
+      reasons.push("Close to your preferred departure time");
+    }
+
+    return {
+      flight,
+      reasons: reasons.slice(0, 4),
+      score,
+    };
+  });
+
+  scoredFlights.sort((a, b) => b.score - a.score);
+  const best = scoredFlights[0];
+
+  return {
+    flight: best.flight,
+    reasons: best.reasons.length > 0 ? best.reasons : ["Balanced price, duration, and seat availability"],
+  };
+}
+
+function isNearPreferredDeparture(flight: FlightResponse, preferredTime: string) {
+  const [, preferredHour = ""] = preferredTime.match(/^(\d{2})/) ?? [];
+  if (!preferredHour) {
+    return false;
+  }
+  const departureHour = new Date(flight.departureTime).getHours();
+  return Math.abs(departureHour - Number(preferredHour)) <= 2;
+}
+
+function recommendSeats(seats: SeatResponse[]): SeatRecommendation[] {
+  const availableSeats = seats.filter((seat) => !seat.reserved);
+  const reservedSeatNumbers = new Set(seats.filter((seat) => seat.reserved).map((seat) => seat.seatNumber));
+
+  return availableSeats
+    .map((seat) => {
+      const row = seatRow(seat.seatNumber);
+      const letter = seatLetter(seat.seatNumber);
+      const isWindow = ["A", "F", "D"].includes(letter);
+      const hasReservedNeighbor = adjacentSeatLetters(letter).some((neighbor) =>
+        reservedSeatNumbers.has(`${row}${neighbor}`)
+      );
+      let score = 100 - row;
+      const reasons: string[] = [];
+
+      if (isWindow) {
+        score += 24;
+        reasons.push("window seat");
+      }
+
+      if (row > 0 && row <= 12) {
+        score += 18;
+        reasons.push("near the front");
+      }
+
+      if (!hasReservedNeighbor) {
+        score += 14;
+        reasons.push("not next to a reserved seat");
+      }
+
+      if (seat.cabinClass === "ECONOMY") {
+        score += 6;
+        reasons.push("available economy seat");
+      }
+
+      const label = isWindow ? "Window seat" : row <= 12 ? "Recommended" : "More availability";
+      const reason = `Available ${seat.cabinClass.toLowerCase()} seat ${
+        reasons.length > 0 ? reasons.join(", ") : "with a balanced position"
+      }.`;
+
+      return { label, reason, score, seat };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3)
+    .map(({ label, reason, seat }, index) => ({
+      label: index === 0 ? "Recommended" : label,
+      reason,
+      seat,
+    }));
+}
+
+function seatRow(seatNumber: string) {
+  return Number(seatNumber.match(/\d+/)?.[0] ?? 99);
+}
+
+function seatLetter(seatNumber: string) {
+  return seatNumber.match(/[A-Z]$/)?.[0] ?? "";
+}
+
+function adjacentSeatLetters(letter: string) {
+  const order = ["A", "B", "C", "D", "E", "F"];
+  const index = order.indexOf(letter);
+  return [order[index - 1], order[index + 1]].filter(Boolean);
+}
+
+function startOceanAmbience() {
+  if (typeof window === "undefined") {
+    return () => undefined;
+  }
+
+  const AudioContextClass =
+    window.AudioContext ||
+    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+
+  if (!AudioContextClass) {
+    return () => undefined;
+  }
+
+  const audioContext = new AudioContextClass();
+  const frameCount = audioContext.sampleRate * 3;
+  const buffer = audioContext.createBuffer(1, frameCount, audioContext.sampleRate);
+  const channelData = buffer.getChannelData(0);
+  let lastValue = 0;
+
+  for (let i = 0; i < frameCount; i += 1) {
+    const white = Math.random() * 2 - 1;
+    lastValue = lastValue * 0.985 + white * 0.015;
+    const swell = 0.55 + Math.sin((i / audioContext.sampleRate) * Math.PI * 1.4) * 0.28;
+    channelData[i] = lastValue * swell;
+  }
+
+  const source = audioContext.createBufferSource();
+  const lowpass = audioContext.createBiquadFilter();
+  const gain = audioContext.createGain();
+
+  source.buffer = buffer;
+  source.loop = true;
+  lowpass.type = "lowpass";
+  lowpass.frequency.value = 760;
+  gain.gain.setValueAtTime(0.0001, audioContext.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.16, audioContext.currentTime + 0.6);
+
+  source.connect(lowpass);
+  lowpass.connect(gain);
+  gain.connect(audioContext.destination);
+  source.start();
+
+  return () => {
+    gain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.35);
+    window.setTimeout(() => {
+      source.stop();
+      audioContext.close();
+    }, 420);
+  };
 }
 
 function readStoredValue<T>(key: string, fallback: T): T {
