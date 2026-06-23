@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 import {
   ApiError,
   cancelReservation,
@@ -9,13 +9,24 @@ import {
   runAvailabilityIntegrityCheck,
 } from "./api";
 import type {
+  AvailabilityIntegrityResponse,
   FlightResponse,
   ReservationResponse,
-  AvailabilityIntegrityResponse,
   SeatResponse,
 } from "./types";
 
+type BookingStep = "search" | "flights" | "seats" | "passenger" | "confirmation";
+
+const steps: Array<{ id: BookingStep; label: string }> = [
+  { id: "search", label: "Search" },
+  { id: "flights", label: "Flights" },
+  { id: "seats", label: "Seats" },
+  { id: "passenger", label: "Passenger" },
+  { id: "confirmation", label: "Confirmation" },
+];
+
 export function App() {
+  const [step, setStep] = useState<BookingStep>("search");
   const [flights, setFlights] = useState<FlightResponse[]>([]);
   const [selectedFlight, setSelectedFlight] = useState<FlightResponse | null>(null);
   const [seats, setSeats] = useState<SeatResponse[]>([]);
@@ -43,14 +54,14 @@ export function App() {
   const [runningIntegrityCheck, setRunningIntegrityCheck] = useState(false);
 
   useEffect(() => {
-    loadFlights();
+    loadFlights("search");
   }, []);
 
   const availableSeatCount = useMemo(
     () => seats.filter((seat) => !seat.reserved).length,
     [seats]
   );
-  const reservedSeatCount = seats.length - availableSeatCount;
+
   const airlineOptions = useMemo(() => {
     const options = new Map<string, string>();
     flights.forEach((flight) => {
@@ -61,7 +72,7 @@ export function App() {
     return [...options.entries()].sort((a, b) => a[1].localeCompare(b[1]));
   }, [flights]);
 
-  async function loadFlights() {
+  async function loadFlights(nextStep: BookingStep = "flights") {
     setLoadingFlights(true);
     setStatusMessage("");
     try {
@@ -77,9 +88,11 @@ export function App() {
         departureTimeTo,
       });
       setFlights(data);
-      if (data.length > 0) {
-        setSelectedFlight(data[0]);
-        await loadSeats(data[0].id);
+      setSelectedFlight((current) => data.find((flight) => flight.id === current?.id) ?? null);
+      setSelectedSeat(null);
+      setReservation(null);
+      if (nextStep !== "search") {
+        setStep(nextStep);
       }
     } catch {
       setStatusMessage("Flights could not be loaded. Please check the booking service.");
@@ -90,9 +103,9 @@ export function App() {
 
   async function loadSeats(flightId: string) {
     setLoadingSeats(true);
+    setStatusMessage("");
     try {
-      const data = await fetchSeats(flightId);
-      setSeats(data);
+      setSeats(await fetchSeats(flightId));
     } catch {
       setStatusMessage("Seat availability could not be loaded for this flight.");
     } finally {
@@ -100,12 +113,18 @@ export function App() {
     }
   }
 
-  async function selectFlight(flight: FlightResponse) {
+  async function chooseFlight(flight: FlightResponse) {
     setSelectedFlight(flight);
     setSelectedSeat(null);
     setReservation(null);
-    setStatusMessage("");
     await loadSeats(flight.id);
+    setStep("seats");
+  }
+
+  function chooseSeat(seat: SeatResponse) {
+    setSelectedSeat(seat);
+    setStatusMessage("");
+    setStep("passenger");
   }
 
   async function submitReservation(event: FormEvent<HTMLFormElement>) {
@@ -116,7 +135,6 @@ export function App() {
 
     setReserving(true);
     setStatusMessage("");
-    setReservation(null);
     try {
       const response = await reserveSeat(
         selectedFlight.id,
@@ -127,13 +145,13 @@ export function App() {
         passengerType
       );
       setReservation(response);
-      setStatusMessage(`Seat ${selectedSeat.seatNumber} is confirmed for ${response.customerName}.`);
-      setSelectedSeat(null);
       await loadSeats(selectedFlight.id);
+      setStep("confirmation");
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
         setStatusMessage("This seat has already been reserved. Please choose another seat.");
         await loadSeats(selectedFlight.id);
+        setStep("seats");
       } else {
         setStatusMessage("Booking could not be completed. Please try again.");
       }
@@ -163,419 +181,480 @@ export function App() {
     try {
       const cancelled = await cancelReservation(reservation.reservationId);
       setReservation(cancelled);
-      setStatusMessage("Booking has been cancelled. The seat is available again.");
       await loadSeats(selectedFlight.id);
-      await loadFlights();
     } catch {
       setStatusMessage("Booking could not be cancelled. Please try again.");
     }
   }
 
+  function startNewSearch() {
+    setSelectedFlight(null);
+    setSelectedSeat(null);
+    setReservation(null);
+    setStatusMessage("");
+    setStep("search");
+  }
+
   return (
     <main className="app-shell">
-      <section className="hero" id="overview">
+      <header className="site-header">
         <div>
-          <p className="eyebrow">Secure flight booking</p>
-          <h1>AeroWay</h1>
-          <p className="hero-copy">
-            Search flights, choose a seat, and complete reservations with real-time availability.
-          </p>
-          <div className="hero-actions">
-            <a className="button primary" href="#flights">
-              Book a flight
-            </a>
-            <a className="button" href="#availability">
-              Check seat protection
-            </a>
-          </div>
+          <strong>AeroWay</strong>
+          <span>Flight booking</span>
         </div>
-      </section>
+        <a href="http://localhost:8080/swagger-ui/index.html" target="_blank" rel="noreferrer">
+          API docs
+        </a>
+      </header>
 
-      <section className="workspace" id="flights">
-        <section className="search-panel">
-          <div>
-            <label htmlFor="origin">From</label>
-            <input
-              id="origin"
-              placeholder="BER"
-              value={origin}
-              onChange={(event) => setOrigin(event.target.value)}
-            />
+      <section className="booking-shell">
+        <aside className="trip-summary">
+          <p className="eyebrow">Your trip</p>
+          <h1>Book a flight</h1>
+          <div className="summary-line">
+            <span>Route</span>
+            <strong>
+              {selectedFlight
+                ? `${selectedFlight.origin} to ${selectedFlight.destination}`
+                : origin || destination
+                  ? `${origin || "Any"} to ${destination || "Any"}`
+                  : "Choose a route"}
+            </strong>
           </div>
-          <div>
-            <label htmlFor="destination">To</label>
-            <input
-              id="destination"
-              placeholder="LIS"
-              value={destination}
-              onChange={(event) => setDestination(event.target.value)}
-            />
+          <div className="summary-line">
+            <span>Flight</span>
+            <strong>{selectedFlight?.flightNumber ?? "Not selected"}</strong>
           </div>
-          <div>
-            <label htmlFor="travelDate">Departure</label>
-            <input
-              id="travelDate"
-              type="date"
-              value={travelDate}
-              onChange={(event) => setTravelDate(event.target.value)}
-            />
+          <div className="summary-line">
+            <span>Seat</span>
+            <strong>{selectedSeat?.seatNumber ?? reservation?.seatNumber ?? "Not selected"}</strong>
           </div>
-          <div>
-            <label htmlFor="airlineCode">Airline</label>
-            <select
-              id="airlineCode"
-              value={airlineCode}
-              onChange={(event) => setAirlineCode(event.target.value)}
-            >
-              <option value="">Any airline</option>
-              {airlineOptions.map(([code, name]) => (
-                <option key={code} value={code}>
-                  {name}
-                </option>
-              ))}
-            </select>
+          <div className="summary-line">
+            <span>Status</span>
+            <strong>{reservation?.status ?? "In progress"}</strong>
           </div>
-          <div>
-            <label htmlFor="maxPrice">Max price</label>
-            <input
-              id="maxPrice"
-              min="0"
-              placeholder="250"
-              type="number"
-              value={maxPrice}
-              onChange={(event) => setMaxPrice(event.target.value)}
-            />
-          </div>
-          <div>
-            <label htmlFor="cabinClass">Cabin</label>
-            <select
-              id="cabinClass"
-              value={cabinClass}
-              onChange={(event) => setCabinClass(event.target.value)}
-            >
-              <option value="">Any cabin</option>
-              <option value="ECONOMY">Economy</option>
-              <option value="PREMIUM">Premium</option>
-              <option value="BUSINESS">Business</option>
-            </select>
-          </div>
-          <div>
-            <label htmlFor="departureTimeFrom">After</label>
-            <input
-              id="departureTimeFrom"
-              type="time"
-              value={departureTimeFrom}
-              onChange={(event) => setDepartureTimeFrom(event.target.value)}
-            />
-          </div>
-          <div>
-            <label htmlFor="departureTimeTo">Before</label>
-            <input
-              id="departureTimeTo"
-              type="time"
-              value={departureTimeTo}
-              onChange={(event) => setDepartureTimeTo(event.target.value)}
-            />
-          </div>
-          <label className="checkbox-row" htmlFor="directOnly">
-            <input
-              checked={directOnly}
-              id="directOnly"
-              type="checkbox"
-              onChange={(event) => setDirectOnly(event.target.checked)}
-            />
-            Direct only
-          </label>
-          <button className="primary" type="button" onClick={loadFlights}>
-            Search flights
-          </button>
-        </section>
+        </aside>
 
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">Available trips</p>
-            <h2>Choose your flight and seat</h2>
-          </div>
-          <div className="metric-group">
-            <span className="metric">{availableSeatCount} seats available</span>
-            <span className="metric secondary">{reservedSeatCount} reserved</span>
-          </div>
-        </div>
+        <section className="booking-main">
+          <StepIndicator currentStep={step} />
+          {statusMessage && <div className="notice">{statusMessage}</div>}
 
-        {statusMessage && <div className="notice">{statusMessage}</div>}
-        {reservation && (
-          <div className="success">
-            Reservation confirmed: {reservation.reservationId}
-          </div>
-        )}
-
-        <div className="two-column" id="results">
-          <section className="panel">
-            <h3>Flights</h3>
-            {loadingFlights ? (
-              <p className="muted">Loading flights...</p>
-            ) : (
-              <div className="flight-list">
-                {flights.map((flight) => (
-                  <button
-                    className={`flight-row ${selectedFlight?.id === flight.id ? "selected" : ""}`}
-                    key={flight.id}
-                    onClick={() => selectFlight(flight)}
+          {step === "search" && (
+            <section className="booking-card">
+              <div className="card-heading">
+                <p className="eyebrow">Step 1</p>
+                <h2>Where would you like to go?</h2>
+              </div>
+              <div className="search-panel compact">
+                <Field label="From" htmlFor="origin">
+                  <input
+                    id="origin"
+                    placeholder="BER"
+                    value={origin}
+                    onChange={(event) => setOrigin(event.target.value)}
+                  />
+                </Field>
+                <Field label="To" htmlFor="destination">
+                  <input
+                    id="destination"
+                    placeholder="LIS"
+                    value={destination}
+                    onChange={(event) => setDestination(event.target.value)}
+                  />
+                </Field>
+                <Field label="Departure" htmlFor="travelDate">
+                  <input
+                    id="travelDate"
+                    type="date"
+                    value={travelDate}
+                    onChange={(event) => setTravelDate(event.target.value)}
+                  />
+                </Field>
+                <Field label="Airline" htmlFor="airlineCode">
+                  <select
+                    id="airlineCode"
+                    value={airlineCode}
+                    onChange={(event) => setAirlineCode(event.target.value)}
                   >
-                    <div className="flight-main">
-                      <strong>{flight.flightNumber}</strong>
-                      <span>{flight.airlineName ?? "AeroWay Partner"}</span>
-                    </div>
-                    <span className="route-line">
-                      {flight.origin} {flight.originCity ? `(${flight.originCity})` : ""} to{" "}
-                      {flight.destination}{" "}
-                      {flight.destinationCity ? `(${flight.destinationCity})` : ""}
-                    </span>
-                    <small>
-                      {formatDate(flight.departureTime)}
-                      {flight.equipment ? ` · ${flight.equipment}` : ""}
-                    </small>
-                    {flight.basePriceCents && (
-                      <span className="price">from {formatPrice(flight.basePriceCents)}</span>
-                    )}
-                  </button>
-                ))}
-                {flights.length === 0 && (
-                  <p className="muted">No flights match your current search.</p>
-                )}
+                    <option value="">Any airline</option>
+                    {airlineOptions.map(([code, name]) => (
+                      <option key={code} value={code}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Max price" htmlFor="maxPrice">
+                  <input
+                    id="maxPrice"
+                    min="0"
+                    placeholder="250"
+                    type="number"
+                    value={maxPrice}
+                    onChange={(event) => setMaxPrice(event.target.value)}
+                  />
+                </Field>
+                <Field label="Cabin" htmlFor="cabinClass">
+                  <select
+                    id="cabinClass"
+                    value={cabinClass}
+                    onChange={(event) => setCabinClass(event.target.value)}
+                  >
+                    <option value="">Any cabin</option>
+                    <option value="ECONOMY">Economy</option>
+                    <option value="PREMIUM">Premium</option>
+                    <option value="BUSINESS">Business</option>
+                  </select>
+                </Field>
+                <Field label="After" htmlFor="departureTimeFrom">
+                  <input
+                    id="departureTimeFrom"
+                    type="time"
+                    value={departureTimeFrom}
+                    onChange={(event) => setDepartureTimeFrom(event.target.value)}
+                  />
+                </Field>
+                <Field label="Before" htmlFor="departureTimeTo">
+                  <input
+                    id="departureTimeTo"
+                    type="time"
+                    value={departureTimeTo}
+                    onChange={(event) => setDepartureTimeTo(event.target.value)}
+                  />
+                </Field>
+                <label className="checkbox-row" htmlFor="directOnly">
+                  <input
+                    checked={directOnly}
+                    id="directOnly"
+                    type="checkbox"
+                    onChange={(event) => setDirectOnly(event.target.checked)}
+                  />
+                  Direct only
+                </label>
               </div>
-            )}
-          </section>
+              <div className="step-actions">
+                <button className="primary" type="button" onClick={() => loadFlights("flights")}>
+                  {loadingFlights ? "Searching..." : "Search flights"}
+                </button>
+              </div>
+            </section>
+          )}
 
-          <section className="panel">
-            <div className="panel-title-row">
-              <h3>Seat map</h3>
-              {selectedFlight && <span>{selectedFlight.flightNumber}</span>}
-            </div>
-            {loadingSeats ? (
-              <p className="muted">Loading seats...</p>
-            ) : (
-              <div className="seat-grid">
-                {seats.map((seat) => (
-                  <article className={`seat-card ${seat.reserved ? "reserved" : ""}`} key={seat.id}>
-                    <div>
-                      <strong>{seat.seatNumber}</strong>
-                      <span>{seat.cabinClass}</span>
-                    </div>
-                    <p>{seat.reserved ? "Reserved" : "Available"}</p>
-                    <button
-                      disabled={seat.reserved}
-                      onClick={() => {
-                        setSelectedSeat(seat);
-                        setStatusMessage("");
-                      }}
-                    >
-                      Select
+          {step === "flights" && (
+            <section className="booking-card">
+              <div className="card-heading split">
+                <div>
+                  <p className="eyebrow">Step 2</p>
+                  <h2>Choose your flight</h2>
+                </div>
+                <button type="button" onClick={() => setStep("search")}>
+                  Edit search
+                </button>
+              </div>
+              {loadingFlights ? (
+                <p className="muted">Loading flights...</p>
+              ) : (
+                <div className="flight-list">
+                  {flights.map((flight) => (
+                    <button className="flight-row" key={flight.id} onClick={() => chooseFlight(flight)}>
+                      <div className="flight-main">
+                        <strong>{flight.flightNumber}</strong>
+                        <span>{flight.airlineName ?? "AeroWay Partner"}</span>
+                      </div>
+                      <span className="route-line">
+                        {flight.origin} {flight.originCity ? `(${flight.originCity})` : ""} to{" "}
+                        {flight.destination}{" "}
+                        {flight.destinationCity ? `(${flight.destinationCity})` : ""}
+                      </span>
+                      <small>
+                        {formatDate(flight.departureTime)}
+                        {flight.durationMinutes ? ` · ${formatDuration(flight.durationMinutes)}` : ""}
+                        {flight.equipment ? ` · ${flight.equipment}` : ""}
+                      </small>
+                      <span className="price">
+                        {flight.basePriceCents ? `from ${formatPrice(flight.basePriceCents)}` : "Price pending"}
+                      </span>
                     </button>
-                  </article>
-                ))}
-              </div>
-            )}
-          </section>
-        </div>
+                  ))}
+                  {flights.length === 0 && (
+                    <p className="muted">No flights match your current search.</p>
+                  )}
+                </div>
+              )}
+            </section>
+          )}
 
-        {selectedFlight && (
-          <section className="flight-detail-panel">
-            <div>
-              <p className="eyebrow">Flight details</p>
-              <h3>
-                {selectedFlight.flightNumber} · {selectedFlight.airlineName ?? "AeroWay Partner"}
-              </h3>
-            </div>
-            <dl className="detail-grid">
-              <div>
-                <dt>Route</dt>
-                <dd>
-                  {selectedFlight.originAirportName ?? selectedFlight.origin} to{" "}
-                  {selectedFlight.destinationAirportName ?? selectedFlight.destination}
-                </dd>
+          {step === "seats" && selectedFlight && (
+            <section className="booking-card">
+              <div className="card-heading split">
+                <div>
+                  <p className="eyebrow">Step 3</p>
+                  <h2>Select a seat</h2>
+                </div>
+                <button type="button" onClick={() => setStep("flights")}>
+                  Change flight
+                </button>
               </div>
-              <div>
-                <dt>Duration</dt>
-                <dd>{formatDuration(selectedFlight.durationMinutes)}</dd>
-              </div>
-              <div>
-                <dt>Aircraft</dt>
-                <dd>{selectedFlight.equipment ?? "N/A"}</dd>
-              </div>
-              <div>
-                <dt>Available seats</dt>
-                <dd>{selectedFlight.availableSeatCount ?? availableSeatCount}</dd>
-              </div>
-              <div>
-                <dt>Starting fare</dt>
-                <dd>{selectedFlight.basePriceCents ? formatPrice(selectedFlight.basePriceCents) : "N/A"}</dd>
-              </div>
-              <div>
-                <dt>Baggage</dt>
-                <dd>1 cabin bag included. Checked baggage available at airport counter.</dd>
-              </div>
-            </dl>
-          </section>
-        )}
+              <FlightDetails flight={selectedFlight} availableSeatCount={availableSeatCount} />
+              {loadingSeats ? (
+                <p className="muted">Loading seats...</p>
+              ) : (
+                <div className="seat-grid">
+                  {seats.map((seat) => (
+                    <article className={`seat-card ${seat.reserved ? "reserved" : ""}`} key={seat.id}>
+                      <div>
+                        <strong>{seat.seatNumber}</strong>
+                        <span>{seat.cabinClass}</span>
+                      </div>
+                      <p>{seat.reserved ? "Reserved" : "Available"}</p>
+                      <button disabled={seat.reserved} onClick={() => chooseSeat(seat)}>
+                        Choose seat
+                      </button>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
 
-        {selectedSeat && selectedFlight && (
-          <section className="reservation-panel">
-            <div>
-              <p className="eyebrow">Booking details</p>
-              <h3>Confirm seat {selectedSeat.seatNumber}</h3>
-              <p className="muted">
-                {selectedFlight.flightNumber}: {selectedFlight.origin} to {selectedFlight.destination}
-              </p>
-              <dl className="booking-summary">
+          {step === "passenger" && selectedFlight && selectedSeat && (
+            <section className="booking-card">
+              <div className="card-heading split">
                 <div>
-                  <dt>Carrier</dt>
-                  <dd>{selectedFlight.airlineName ?? "AeroWay Partner"}</dd>
+                  <p className="eyebrow">Step 4</p>
+                  <h2>Passenger details</h2>
                 </div>
-                <div>
-                  <dt>Departure</dt>
-                  <dd>{formatDate(selectedFlight.departureTime)}</dd>
+                <button type="button" onClick={() => setStep("seats")}>
+                  Change seat
+                </button>
+              </div>
+              <div className="checkout-layout">
+                <div className="fare-card">
+                  <strong>
+                    {selectedFlight.flightNumber} · Seat {selectedSeat.seatNumber}
+                  </strong>
+                  <span>
+                    {selectedFlight.origin} to {selectedFlight.destination}
+                  </span>
+                  <span>{formatDate(selectedFlight.departureTime)}</span>
+                  <span>{selectedSeat.cabinClass}</span>
+                  <strong>
+                    {selectedFlight.basePriceCents
+                      ? formatPrice(selectedFlight.basePriceCents)
+                      : "Fare pending"}
+                  </strong>
                 </div>
-                <div>
-                  <dt>Cabin</dt>
-                  <dd>{selectedSeat.cabinClass}</dd>
-                </div>
-                {selectedFlight.basePriceCents && (
-                  <div>
-                    <dt>Starting fare</dt>
-                    <dd>{formatPrice(selectedFlight.basePriceCents)}</dd>
+                <form onSubmit={submitReservation}>
+                  <Field label="Passenger name" htmlFor="customerName">
+                    <input
+                      id="customerName"
+                      value={customerName}
+                      onChange={(event) => setCustomerName(event.target.value)}
+                      required
+                    />
+                  </Field>
+                  <Field label="Email" htmlFor="customerEmail">
+                    <input
+                      id="customerEmail"
+                      type="email"
+                      value={customerEmail}
+                      onChange={(event) => setCustomerEmail(event.target.value)}
+                      required
+                    />
+                  </Field>
+                  <Field label="Passport or document number" htmlFor="documentNumber">
+                    <input
+                      id="documentNumber"
+                      value={documentNumber}
+                      onChange={(event) => setDocumentNumber(event.target.value)}
+                      required
+                    />
+                  </Field>
+                  <Field label="Passenger type" htmlFor="passengerType">
+                    <select
+                      id="passengerType"
+                      value={passengerType}
+                      onChange={(event) => setPassengerType(event.target.value)}
+                    >
+                      <option value="ADULT">Adult</option>
+                      <option value="STUDENT">Student</option>
+                      <option value="CHILD">Child</option>
+                    </select>
+                  </Field>
+                  <div className="step-actions">
+                    <button className="primary" disabled={reserving} type="submit">
+                      {reserving ? "Confirming..." : "Confirm booking"}
+                    </button>
                   </div>
-                )}
-              </dl>
-            </div>
-            <form onSubmit={submitReservation}>
-              <label htmlFor="customerName">Passenger name</label>
-              <input
-                id="customerName"
-                value={customerName}
-                onChange={(event) => setCustomerName(event.target.value)}
-                required
-              />
-              <label htmlFor="customerEmail">Email</label>
-              <input
-                id="customerEmail"
-                type="email"
-                value={customerEmail}
-                onChange={(event) => setCustomerEmail(event.target.value)}
-                required
-              />
-              <label htmlFor="documentNumber">Passport or document number</label>
-              <input
-                id="documentNumber"
-                value={documentNumber}
-                onChange={(event) => setDocumentNumber(event.target.value)}
-                required
-              />
-              <label htmlFor="passengerType">Passenger type</label>
-              <select
-                id="passengerType"
-                value={passengerType}
-                onChange={(event) => setPassengerType(event.target.value)}
-              >
-                <option value="ADULT">Adult</option>
-                <option value="STUDENT">Student</option>
-                <option value="CHILD">Child</option>
-              </select>
-              <div className="form-actions">
-                <button className="primary" disabled={reserving} type="submit">
-                  {reserving ? "Confirming..." : "Complete booking"}
-                </button>
-                <button type="button" onClick={() => setSelectedSeat(null)}>
-                  Cancel
-                </button>
+                </form>
               </div>
-            </form>
-          </section>
-        )}
+            </section>
+          )}
 
-        {reservation && (
-          <section className="confirmation-panel">
-            <div className="section-heading">
-              <div>
-                <p className="eyebrow">Booking confirmation</p>
-                <h2>{reservation.status}</h2>
-              </div>
-              {reservation.status === "CONFIRMED" && (
-                <button type="button" onClick={handleCancelReservation}>
-                  Cancel booking
+          {step === "confirmation" && reservation && (
+            <section className="booking-card">
+              <div className="card-heading split">
+                <div>
+                  <p className="eyebrow">Step 5</p>
+                  <h2>Booking {reservation.status.toLowerCase()}</h2>
+                </div>
+                <button type="button" onClick={startNewSearch}>
+                  New search
                 </button>
+              </div>
+              <dl className="detail-grid">
+                <div>
+                  <dt>Booking number</dt>
+                  <dd>{reservation.reservationId}</dd>
+                </div>
+                <div>
+                  <dt>Flight</dt>
+                  <dd>
+                    {reservation.flightNumber}: {reservation.origin} to {reservation.destination}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Seat</dt>
+                  <dd>
+                    {reservation.seatNumber} · {reservation.cabinClass}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Passenger</dt>
+                  <dd>
+                    {reservation.customerName} · {reservation.passengerType}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Email</dt>
+                  <dd>{reservation.customerEmail ?? "N/A"}</dd>
+                </div>
+                <div>
+                  <dt>Created</dt>
+                  <dd>{formatDate(reservation.createdAt)}</dd>
+                </div>
+              </dl>
+              <div className="step-actions">
+                {reservation.status === "CONFIRMED" && (
+                  <button type="button" onClick={handleCancelReservation}>
+                    Cancel booking
+                  </button>
+                )}
+                <button className="primary" type="button" onClick={startNewSearch}>
+                  Book another flight
+                </button>
+              </div>
+            </section>
+          )}
+
+          <section className="booking-card availability-card">
+            <div className="card-heading split">
+              <div>
+                <p className="eyebrow">Seat availability</p>
+                <h2>Protection check</h2>
+              </div>
+              <button className="primary" disabled={runningIntegrityCheck} onClick={handleRunIntegrityCheck}>
+                {runningIntegrityCheck ? "Checking..." : "Run 100 booking attempts"}
+              </button>
+            </div>
+            <div className="integrity-grid">
+              {integrityCheckResult ? (
+                <>
+                  <ResultCard label="Attempts" value={integrityCheckResult.attempts} />
+                  <ResultCard label="Confirmed" value={integrityCheckResult.successfulReservations} />
+                  <ResultCard label="Conflicts" value={integrityCheckResult.conflicts} />
+                  <ResultCard
+                    label="Duplicates stored"
+                    value={integrityCheckResult.duplicateReservationsInDatabase}
+                  />
+                </>
+              ) : (
+                <p className="muted">
+                  Run this check to verify that only one booking is stored when many customers try
+                  to reserve the same seat at the same time.
+                </p>
               )}
             </div>
-            <dl className="detail-grid">
-              <div>
-                <dt>Booking number</dt>
-                <dd>{reservation.reservationId}</dd>
-              </div>
-              <div>
-                <dt>Flight</dt>
-                <dd>
-                  {reservation.flightNumber}: {reservation.origin} to {reservation.destination}
-                </dd>
-              </div>
-              <div>
-                <dt>Seat</dt>
-                <dd>
-                  {reservation.seatNumber} · {reservation.cabinClass}
-                </dd>
-              </div>
-              <div>
-                <dt>Passenger</dt>
-                <dd>
-                  {reservation.customerName} · {reservation.passengerType}
-                </dd>
-              </div>
-              <div>
-                <dt>Email</dt>
-                <dd>{reservation.customerEmail ?? "N/A"}</dd>
-              </div>
-              <div>
-                <dt>Created</dt>
-                <dd>{formatDate(reservation.createdAt)}</dd>
-              </div>
-            </dl>
           </section>
-        )}
-      </section>
-
-      <section className="integrity-section" id="availability">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">Availability integrity</p>
-            <h2>Validate booking protection</h2>
-          </div>
-          <button className="primary" disabled={runningIntegrityCheck} onClick={handleRunIntegrityCheck}>
-            {runningIntegrityCheck ? "Checking..." : "Run 100-attempt availability check"}
-          </button>
-        </div>
-
-        <div className="integrity-grid">
-          {integrityCheckResult ? (
-            <>
-              <ResultCard label="Booking attempts" value={integrityCheckResult.attempts} />
-              <ResultCard
-                label="Confirmed bookings"
-                value={integrityCheckResult.successfulReservations}
-              />
-              <ResultCard label="Rejected conflicts" value={integrityCheckResult.conflicts} />
-              <ResultCard
-                label="Duplicate bookings stored"
-                value={integrityCheckResult.duplicateReservationsInDatabase}
-              />
-            </>
-          ) : (
-            <p className="muted">
-              Run a live availability protection check to confirm that only one booking can be
-              stored for a single seat, even when many requests arrive at once.
-            </p>
-          )}
-        </div>
+        </section>
       </section>
     </main>
+  );
+}
+
+function StepIndicator({ currentStep }: { currentStep: BookingStep }) {
+  const currentIndex = steps.findIndex((item) => item.id === currentStep);
+  return (
+    <nav className="stepper" aria-label="Booking progress">
+      {steps.map((item, index) => (
+        <div
+          className={`stepper-item ${index <= currentIndex ? "active" : ""} ${
+            item.id === currentStep ? "current" : ""
+          }`}
+          key={item.id}
+        >
+          <span>{index + 1}</span>
+          <strong>{item.label}</strong>
+        </div>
+      ))}
+    </nav>
+  );
+}
+
+function Field({
+  children,
+  htmlFor,
+  label,
+}: {
+  children: ReactNode;
+  htmlFor: string;
+  label: string;
+}) {
+  return (
+    <div className="field">
+      <label htmlFor={htmlFor}>{label}</label>
+      {children}
+    </div>
+  );
+}
+
+function FlightDetails({
+  availableSeatCount,
+  flight,
+}: {
+  availableSeatCount: number;
+  flight: FlightResponse;
+}) {
+  return (
+    <dl className="detail-grid flight-details">
+      <div>
+        <dt>Route</dt>
+        <dd>
+          {flight.originAirportName ?? flight.origin} to{" "}
+          {flight.destinationAirportName ?? flight.destination}
+        </dd>
+      </div>
+      <div>
+        <dt>Duration</dt>
+        <dd>{formatDuration(flight.durationMinutes)}</dd>
+      </div>
+      <div>
+        <dt>Aircraft</dt>
+        <dd>{flight.equipment ?? "N/A"}</dd>
+      </div>
+      <div>
+        <dt>Available seats</dt>
+        <dd>{flight.availableSeatCount ?? availableSeatCount}</dd>
+      </div>
+      <div>
+        <dt>Starting fare</dt>
+        <dd>{flight.basePriceCents ? formatPrice(flight.basePriceCents) : "N/A"}</dd>
+      </div>
+      <div>
+        <dt>Baggage</dt>
+        <dd>1 cabin bag included. Checked baggage available at airport counter.</dd>
+      </div>
+    </dl>
   );
 }
 
