@@ -15,7 +15,7 @@ import type {
 } from "./types";
 
 type BookingStep = "search" | "flights" | "seats" | "passenger" | "confirmation";
-type AppView = "booking" | "account";
+type AppView = "home" | "booking" | "account";
 type UserProfile = {
   name: string;
   email: string;
@@ -30,6 +30,20 @@ type SeatRecommendation = {
   seat: SeatResponse;
   label: string;
   reason: string;
+};
+type Toast = {
+  kind: "success" | "error" | "info";
+  message: string;
+};
+type DestinationSpotlight = {
+  airportCode: string;
+  city: string;
+  country?: string;
+  imageUrl: string;
+  summary: string;
+  startingFare?: number;
+  flightCount: number;
+  sampleFlights: FlightResponse[];
 };
 
 const defaultUserProfile: UserProfile = {
@@ -99,11 +113,61 @@ const airlineOptions = [
   ["DL", "Delta Air Lines"],
 ] as const;
 
+const destinationContent: Record<string, { imageUrl: string; summary: string }> = {
+  BCN: {
+    imageUrl: "https://images.unsplash.com/photo-1539037116277-4db20889f2d4?auto=format&fit=crop&w=1200&q=80",
+    summary: "Mediterranean evenings, Gaudi landmarks, and easy beach days.",
+  },
+  BER: {
+    imageUrl: "https://images.unsplash.com/photo-1560969184-10fe8719e047?auto=format&fit=crop&w=1200&q=80",
+    summary: "Creative neighborhoods, museums, and a relaxed city-break pace.",
+  },
+  CDG: {
+    imageUrl: "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=1200&q=80",
+    summary: "Classic boulevards, galleries, cafes, and a long-weekend glow.",
+  },
+  DXB: {
+    imageUrl: "https://images.unsplash.com/photo-1512453979798-5ea266f8880c?auto=format&fit=crop&w=1200&q=80",
+    summary: "Sunset skylines, warm beaches, and polished stopover energy.",
+  },
+  FCO: {
+    imageUrl: "https://images.unsplash.com/photo-1529260830199-42c24126f198?auto=format&fit=crop&w=1200&q=80",
+    summary: "Ancient streets, open-air dining, and slow golden afternoons.",
+  },
+  JFK: {
+    imageUrl: "https://images.unsplash.com/photo-1485871981521-5b1fd3805eee?auto=format&fit=crop&w=1200&q=80",
+    summary: "Big-city momentum, landmark views, and neighborhoods made for wandering.",
+  },
+  LIS: {
+    imageUrl: "https://images.unsplash.com/photo-1500930287596-c1ecaa373bb2?auto=format&fit=crop&w=1200&q=80",
+    summary: "Ocean air, tiled streets, hilltop views, and easy Atlantic light.",
+  },
+  NRT: {
+    imageUrl: "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?auto=format&fit=crop&w=1200&q=80",
+    summary: "Neon nights, quiet gardens, and food worth planning a trip around.",
+  },
+  PEK: {
+    imageUrl: "https://images.unsplash.com/photo-1508804185872-d7badad00f7d?auto=format&fit=crop&w=1200&q=80",
+    summary: "Imperial history, modern scale, and rich cultural routes.",
+  },
+  SIN: {
+    imageUrl: "https://images.unsplash.com/photo-1525625293386-3f8f99389edd?auto=format&fit=crop&w=1200&q=80",
+    summary: "Garden-city design, night markets, and seamless tropical stopovers.",
+  },
+};
+
+const fallbackDestinationImage =
+  "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=80";
+
 export function App() {
   const [showWelcome, setShowWelcome] = useState(true);
-  const [view, setView] = useState<AppView>("booking");
+  const [appEntering, setAppEntering] = useState(false);
+  const [view, setView] = useState<AppView>("home");
   const [step, setStep] = useState<BookingStep>("search");
   const [flights, setFlights] = useState<FlightResponse[]>([]);
+  const [exploreFlights, setExploreFlights] = useState<FlightResponse[]>([]);
+  const [loadingExplore, setLoadingExplore] = useState(false);
+  const [selectedDestination, setSelectedDestination] = useState<DestinationSpotlight | null>(null);
   const [selectedFlight, setSelectedFlight] = useState<FlightResponse | null>(null);
   const [seats, setSeats] = useState<SeatResponse[]>([]);
   const [selectedSeat, setSelectedSeat] = useState<SeatResponse | null>(null);
@@ -133,6 +197,8 @@ export function App() {
   const [documentNumber, setDocumentNumber] = useState(() => userProfile.documentNumber);
   const [passengerType, setPassengerType] = useState(() => userProfile.passengerType);
   const [statusMessage, setStatusMessage] = useState("");
+  const [statusTone, setStatusTone] = useState<Toast["kind"]>("info");
+  const [toast, setToast] = useState<Toast | null>(null);
   const [reservation, setReservation] = useState<ReservationResponse | null>(null);
   const [loadingFlights, setLoadingFlights] = useState(false);
   const [loadingSeats, setLoadingSeats] = useState(false);
@@ -140,6 +206,7 @@ export function App() {
   const [holdingSeat, setHoldingSeat] = useState(false);
   const [confirmIdempotencyKey, setConfirmIdempotencyKey] = useState(() => createIdempotencyKey());
   const [simulatePaymentFailure, setSimulatePaymentFailure] = useState(false);
+  const toastTimeoutRef = useRef<number | null>(null);
 
   const availableSeatCount = useMemo(
     () => seats.filter((seat) => !seat.reserved).length,
@@ -158,17 +225,64 @@ export function App() {
   );
   const seatRecommendations = useMemo(() => recommendSeats(seats), [seats]);
   const recommendedSeat = seatRecommendations[0] ?? null;
+  const destinationSpotlights = useMemo(() => buildDestinationSpotlights(exploreFlights), [exploreFlights]);
+  const lowFareFlights = useMemo(
+    () =>
+      [...exploreFlights]
+        .filter((flight) => flight.basePriceCents)
+        .sort((a, b) => (a.basePriceCents ?? 0) - (b.basePriceCents ?? 0))
+        .slice(0, 4),
+    [exploreFlights]
+  );
+
+  function clearStatus() {
+    setStatusMessage("");
+    setStatusTone("info");
+  }
+
+  function showStatus(message: string, kind: Toast["kind"] = "info") {
+    setStatusMessage(message);
+    setStatusTone(kind);
+  }
+
+  function showToast(message: string, kind: Toast["kind"] = "info") {
+    setToast({ kind, message });
+    if (toastTimeoutRef.current) {
+      window.clearTimeout(toastTimeoutRef.current);
+    }
+    toastTimeoutRef.current = window.setTimeout(() => setToast(null), 3200);
+  }
+
+  async function loadExploreFlights() {
+    if (loadingExplore || exploreFlights.length > 0) {
+      return;
+    }
+
+    setLoadingExplore(true);
+    try {
+      setExploreFlights(await fetchFlights());
+    } catch {
+      showToast("Travel inspiration could not be loaded", "error");
+    } finally {
+      setLoadingExplore(false);
+    }
+  }
+
+  function openHome() {
+    setView("home");
+    void loadExploreFlights();
+  }
 
   async function loadFlights(nextStep: BookingStep = "flights") {
     setLoadingFlights(true);
-    setStatusMessage("");
+    clearStatus();
     try {
       const data = await fetchFlights(searchParams());
       if (data.length === 0 && hasActiveSearch()) {
         const suggestedFlights = await fetchFallbackFlights();
         setFlights(suggestedFlights);
         setSelectedFlight(null);
-        setStatusMessage(fallbackMessage(suggestedFlights));
+        showStatus(fallbackMessage(suggestedFlights), "info");
       } else {
         setFlights(data);
         setSelectedFlight((current) => data.find((flight) => flight.id === current?.id) ?? null);
@@ -179,7 +293,8 @@ export function App() {
         setStep(nextStep);
       }
     } catch {
-      setStatusMessage("Flights could not be loaded. Please check the booking service.");
+      showStatus("Flights could not be loaded. Please check the booking service.", "error");
+      showToast("Flights could not be loaded", "error");
     } finally {
       setLoadingFlights(false);
     }
@@ -256,11 +371,12 @@ export function App() {
 
   async function loadSeats(flightId: string) {
     setLoadingSeats(true);
-    setStatusMessage("");
+    clearStatus();
     try {
       setSeats(await fetchSeats(flightId));
     } catch {
-      setStatusMessage("Seat availability could not be loaded for this flight.");
+      showStatus("Seat availability could not be loaded for this flight.", "error");
+      showToast("Seat map unavailable", "error");
     } finally {
       setLoadingSeats(false);
     }
@@ -311,6 +427,29 @@ export function App() {
     await chooseFlight(flight);
   }
 
+  async function openFlightFromHome(flight: FlightResponse) {
+    setView("booking");
+    setFlights([flight]);
+    await chooseFlight(flight);
+  }
+
+  function browseDestination(destinationSpotlight: DestinationSpotlight) {
+    const destinationFlights = destinationSpotlight.sampleFlights;
+    const firstFlight = destinationFlights[0];
+    if (firstFlight) {
+      setOrigin(firstFlight.origin);
+      setDestination(destinationSpotlight.airportCode);
+      setTravelDate(firstFlight.departureTime.slice(0, 10));
+    }
+    setFlights(destinationFlights);
+    setSelectedFlight(null);
+    setSelectedSeat(null);
+    setReservation(null);
+    clearStatus();
+    setView("booking");
+    setStep("flights");
+  }
+
   async function chooseFlight(flight: FlightResponse) {
     rememberViewedFlight(flight);
     setSelectedFlight(flight);
@@ -327,7 +466,7 @@ export function App() {
 
     setHoldingSeat(true);
     setSelectedSeat(seat);
-    setStatusMessage("");
+    clearStatus();
     setReservation(null);
     try {
       const hold = await holdSeat(
@@ -340,17 +479,21 @@ export function App() {
       );
       setReservation(hold);
       setConfirmIdempotencyKey(createIdempotencyKey());
-      setStatusMessage(`Seat ${seat.seatNumber} is held for 5 minutes while you complete booking.`);
+      showStatus(`Seat ${seat.seatNumber} is held for 5 minutes while you complete booking.`, "success");
+      showToast(`Seat ${seat.seatNumber} held`, "success");
       await loadSeats(selectedFlight.id);
       setStep("passenger");
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
-        setStatusMessage("This seat is no longer available. Please choose another seat.");
+        showStatus("Seat already reserved.", "error");
+        showToast("Seat already reserved", "error");
         await loadSeats(selectedFlight.id);
       } else if (error instanceof ApiError) {
-        setStatusMessage(`Seat hold could not be created (${error.status}). ${error.message}`);
+        showStatus(`Seat hold could not be created (${error.status}). ${error.message}`, "error");
+        showToast("Seat hold failed", "error");
       } else {
-        setStatusMessage("Seat hold could not be created. Please try again.");
+        showStatus("Seat hold could not be created. Please try again.", "error");
+        showToast("Seat hold failed", "error");
       }
       setSelectedSeat(null);
     } finally {
@@ -365,7 +508,7 @@ export function App() {
     }
 
     setReserving(true);
-    setStatusMessage("");
+    clearStatus();
     try {
       const response = await confirmBooking(
         reservation.reservationId,
@@ -379,15 +522,18 @@ export function App() {
       setReservation(response);
       rememberBooking(response);
       updateUserProfile({ name: customerName, email: customerEmail, documentNumber, passengerType });
+      showToast("Booking confirmed", "success");
       await loadSeats(selectedFlight.id);
       setStep("confirmation");
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
-        setStatusMessage("This seat hold expired or was no longer available. Please choose another seat.");
+        showStatus("Seat already reserved.", "error");
+        showToast("Seat already reserved", "error");
         await loadSeats(selectedFlight.id);
         setStep("seats");
       } else {
-        setStatusMessage("Booking could not be completed. Please try again.");
+        showStatus("Booking could not be completed. Please try again.", "error");
+        showToast("Booking failed", "error");
       }
     } finally {
       setReserving(false);
@@ -398,14 +544,16 @@ export function App() {
     if (!reservation || !selectedFlight) {
       return;
     }
-    setStatusMessage("");
+    clearStatus();
     try {
       const cancelled = await cancelReservation(reservation.reservationId);
       setReservation(cancelled);
       rememberBooking(cancelled);
+      showToast("Booking cancelled", "info");
       await loadSeats(selectedFlight.id);
     } catch {
-      setStatusMessage("Booking could not be cancelled. Please try again.");
+      showStatus("Booking could not be cancelled. Please try again.", "error");
+      showToast("Cancellation failed", "error");
     }
   }
 
@@ -413,24 +561,39 @@ export function App() {
     setSelectedFlight(null);
     setSelectedSeat(null);
     setReservation(null);
-    setStatusMessage("");
+    clearStatus();
     setConfirmIdempotencyKey(createIdempotencyKey());
     setSimulatePaymentFailure(false);
     setStep("search");
   }
 
+  function enterAppFromWelcome() {
+    setShowWelcome(false);
+    setAppEntering(true);
+    setView("home");
+    void loadExploreFlights();
+    window.setTimeout(() => setAppEntering(false), 950);
+  }
+
   if (showWelcome) {
-    return <WelcomeScreen onEnter={() => setShowWelcome(false)} />;
+    return <WelcomeScreen onEnter={enterAppFromWelcome} />;
   }
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell ${appEntering ? "app-entering" : ""}`}>
       <header className="site-header">
         <div>
           <strong>AeroWay</strong>
           <span>Flight booking</span>
         </div>
         <nav className="site-nav" aria-label="Main navigation">
+          <button
+            className={view === "home" ? "nav-active" : ""}
+            type="button"
+            onClick={openHome}
+          >
+            Explore
+          </button>
           <button
             className={view === "booking" ? "nav-active" : ""}
             type="button"
@@ -450,8 +613,19 @@ export function App() {
           </a>
         </nav>
       </header>
+      {toast && <ToastMessage toast={toast} onClose={() => setToast(null)} />}
 
-      {view === "account" ? (
+      {view === "home" ? (
+        <ExploreHome
+          destinations={destinationSpotlights}
+          loading={loadingExplore}
+          lowFareFlights={lowFareFlights}
+          onBrowseDestination={browseDestination}
+          onOpenFlight={openFlightFromHome}
+          onSelectDestination={setSelectedDestination}
+          selectedDestination={selectedDestination}
+        />
+      ) : view === "account" ? (
         <UserAccount
           bookingRecords={bookingRecords}
           favoriteFlights={favoriteFlights}
@@ -493,7 +667,7 @@ export function App() {
 
         <section className="booking-main">
           <StepIndicator currentStep={step} />
-          {statusMessage && <div className="notice">{statusMessage}</div>}
+          {statusMessage && <StatusNotice message={statusMessage} tone={statusTone} />}
 
           {step === "search" && (
             <section className="booking-card">
@@ -589,7 +763,17 @@ export function App() {
               </div>
               <div className="step-actions">
                 <button className="primary" type="button" onClick={() => loadFlights("flights")}>
-                  {loadingFlights ? "Searching..." : "Search flights"}
+                  {loadingFlights ? (
+                    <>
+                      <SpinnerIcon />
+                      Searching...
+                    </>
+                  ) : (
+                    <>
+                      <Icon name="search" />
+                      Search flights
+                    </>
+                  )}
                 </button>
               </div>
             </section>
@@ -607,8 +791,8 @@ export function App() {
                 </button>
               </div>
               {loadingFlights ? (
-                <p className="muted">Loading flights...</p>
-	              ) : (
+                <FlightSkeletonList />
+              ) : (
 	                <div className="flight-list">
 	                  {recommendedFlight && (
 	                    <RecommendedFlightCard
@@ -759,7 +943,17 @@ export function App() {
                   </p>
                   <div className="step-actions">
                     <button className="primary" disabled={reserving} type="submit">
-                      {reserving ? "Processing payment..." : "Complete booking"}
+                      {reserving ? (
+                        <>
+                          <SpinnerIcon />
+                          Reserving...
+                        </>
+                      ) : (
+                        <>
+                          <Icon name="check" />
+                          Complete booking
+                        </>
+                      )}
                     </button>
                   </div>
                 </form>
@@ -854,11 +1048,11 @@ function WelcomeScreen({ onEnter }: { onEnter: () => void }) {
     window.setTimeout(() => {
       stopAmbienceRef.current?.();
       onEnter();
-    }, 1500);
+    }, 1800);
   }
 
   return (
-    <main className="welcome-screen">
+    <main className={`welcome-screen ${entering ? "is-leaving" : ""}`}>
       <video
         aria-label="Ocean waves"
         autoPlay
@@ -905,6 +1099,287 @@ function WelcomeScreen({ onEnter }: { onEnter: () => void }) {
         <span />
       </div>
     </main>
+  );
+}
+
+function ToastMessage({ onClose, toast }: { onClose: () => void; toast: Toast }) {
+  return (
+    <div className={`toast ${toast.kind}`} role="status">
+      <Icon name={toast.kind === "success" ? "check" : toast.kind === "error" ? "alert" : "info"} />
+      <span>{toast.message}</span>
+      <button aria-label="Dismiss notification" type="button" onClick={onClose}>
+        <Icon name="close" />
+      </button>
+    </div>
+  );
+}
+
+function StatusNotice({ message, tone }: { message: string; tone: Toast["kind"] }) {
+  return (
+    <div className={`notice ${tone}`} role={tone === "error" ? "alert" : "status"}>
+      <Icon name={tone === "success" ? "check" : tone === "error" ? "alert" : "info"} />
+      <span>{message}</span>
+    </div>
+  );
+}
+
+function ExploreHome({
+  destinations,
+  loading,
+  lowFareFlights,
+  onBrowseDestination,
+  onOpenFlight,
+  onSelectDestination,
+  selectedDestination,
+}: {
+  destinations: DestinationSpotlight[];
+  loading: boolean;
+  lowFareFlights: FlightResponse[];
+  onBrowseDestination: (destination: DestinationSpotlight) => void;
+  onOpenFlight: (flight: FlightResponse) => void;
+  onSelectDestination: (destination: DestinationSpotlight) => void;
+  selectedDestination: DestinationSpotlight | null;
+}) {
+  const featuredDestinations = destinations.slice(0, 6);
+
+  return (
+    <section className="home-shell">
+      <section className="home-hero">
+        <div>
+          <p className="eyebrow">Travel inspiration</p>
+          <h1>Find a route before you know the destination.</h1>
+          <p>
+            Browse beach weekends, city escapes, and low-fare routes generated from live AeroWay
+            flight availability.
+          </p>
+        </div>
+        <div className="home-hero-card">
+          <span>Today&apos;s idea</span>
+          <strong>{featuredDestinations[0]?.city ?? "Lisbon"}</strong>
+          <small>
+            {featuredDestinations[0]?.startingFare
+              ? `Flights from ${formatPrice(featuredDestinations[0].startingFare)}`
+              : "Ocean light, city walks, and easy planning"}
+          </small>
+        </div>
+      </section>
+
+      {loading ? (
+        <HomeSkeleton />
+      ) : (
+        <>
+          <section className="home-section">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">Recommended destinations</p>
+                <h2>Places to start from</h2>
+              </div>
+            </div>
+            <div className="destination-grid">
+              {featuredDestinations.map((destination) => (
+                <DestinationCard
+                  destination={destination}
+                  key={destination.airportCode}
+                  onBrowse={onBrowseDestination}
+                  onSelect={onSelectDestination}
+                />
+              ))}
+            </div>
+          </section>
+
+          {selectedDestination && (
+            <DestinationDetail
+              destination={selectedDestination}
+              onBrowse={onBrowseDestination}
+              onOpenFlight={onOpenFlight}
+            />
+          )}
+
+          <section className="home-section">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">Low fare finder</p>
+                <h2>Bookable fares right now</h2>
+              </div>
+            </div>
+            <div className="fare-grid">
+              {lowFareFlights.map((flight) => (
+                <button className="fare-tile" key={flight.id} type="button" onClick={() => onOpenFlight(flight)}>
+                  <span>{flight.airlineName ?? "AeroWay Partner"}</span>
+                  <strong>
+                    {flight.origin} to {flight.destination}
+                  </strong>
+                  <small>{formatDate(flight.departureTime)}</small>
+                  <b>{flight.basePriceCents ? formatPrice(flight.basePriceCents) : "Price pending"}</b>
+                </button>
+              ))}
+            </div>
+          </section>
+        </>
+      )}
+    </section>
+  );
+}
+
+function DestinationCard({
+  destination,
+  onBrowse,
+  onSelect,
+}: {
+  destination: DestinationSpotlight;
+  onBrowse: (destination: DestinationSpotlight) => void;
+  onSelect: (destination: DestinationSpotlight) => void;
+}) {
+  return (
+    <article className="destination-card">
+      <button
+        className="destination-media"
+        style={{ backgroundImage: `url(${destination.imageUrl})` }}
+        type="button"
+        onClick={() => onSelect(destination)}
+      >
+        <span>{destination.airportCode}</span>
+      </button>
+      <div>
+        <strong>{destination.city}</strong>
+        <p>{destination.summary}</p>
+      </div>
+      <div className="destination-meta">
+        <span>{destination.flightCount} flights</span>
+        <span>
+          {destination.startingFare ? `from ${formatPrice(destination.startingFare)}` : "fares loading"}
+        </span>
+      </div>
+      <button className="primary" type="button" onClick={() => onBrowse(destination)}>
+        Browse trips
+      </button>
+    </article>
+  );
+}
+
+function DestinationDetail({
+  destination,
+  onBrowse,
+  onOpenFlight,
+}: {
+  destination: DestinationSpotlight;
+  onBrowse: (destination: DestinationSpotlight) => void;
+  onOpenFlight: (flight: FlightResponse) => void;
+}) {
+  return (
+    <section className="destination-detail">
+      <div
+        className="destination-detail-image"
+        style={{ backgroundImage: `url(${destination.imageUrl})` }}
+      />
+      <div>
+        <p className="eyebrow">Destination preview</p>
+        <h2>{destination.city}</h2>
+        <p>{destination.summary}</p>
+        <div className="detail-chips">
+          <span>{destination.airportCode}</span>
+          <span>{destination.flightCount} available flights</span>
+          <span>
+            {destination.startingFare ? `from ${formatPrice(destination.startingFare)}` : "fare pending"}
+          </span>
+        </div>
+        <div className="mini-flight-list">
+          {destination.sampleFlights.slice(0, 3).map((flight) => (
+            <button key={flight.id} type="button" onClick={() => onOpenFlight(flight)}>
+              <strong>{flight.flightNumber}</strong>
+              <span>
+                {flight.origin} to {flight.destination} ·{" "}
+                {flight.basePriceCents ? formatPrice(flight.basePriceCents) : "Price pending"}
+              </span>
+            </button>
+          ))}
+        </div>
+        <button className="primary" type="button" onClick={() => onBrowse(destination)}>
+          See all trips to {destination.city}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function HomeSkeleton() {
+  return (
+    <section className="home-section">
+      <div className="destination-grid">
+        {[0, 1, 2].map((item) => (
+          <article className="destination-card skeleton-card" key={item}>
+            <span className="destination-media" />
+            <span className="skeleton-line short" />
+            <span className="skeleton-line long" />
+            <span className="skeleton-button" />
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function FlightSkeletonList() {
+  return (
+    <div className="flight-list" aria-label="Loading flights">
+      {[0, 1, 2].map((item) => (
+        <article className="flight-row skeleton-card" key={item}>
+          <span className="skeleton-line short" />
+          <span className="skeleton-line long" />
+          <span className="skeleton-line medium" />
+          <div className="flight-actions">
+            <span className="skeleton-pill" />
+            <span className="skeleton-button" />
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function SpinnerIcon() {
+  return <span className="spinner-icon" aria-hidden="true" />;
+}
+
+function Icon({ name }: { name: "alert" | "check" | "close" | "info" | "search" }) {
+  const paths = {
+    alert: (
+      <>
+        <path d="M12 9v4" />
+        <path d="M12 17h.01" />
+        <path d="M10.3 4.2 2.5 17.5A1.7 1.7 0 0 0 4 20h16a1.7 1.7 0 0 0 1.5-2.5L13.7 4.2a1.9 1.9 0 0 0-3.4 0Z" />
+      </>
+    ),
+    check: (
+      <>
+        <path d="M20 6 9 17l-5-5" />
+      </>
+    ),
+    close: (
+      <>
+        <path d="m18 6-12 12" />
+        <path d="m6 6 12 12" />
+      </>
+    ),
+    info: (
+      <>
+        <path d="M12 16v-4" />
+        <path d="M12 8h.01" />
+        <circle cx="12" cy="12" r="9" />
+      </>
+    ),
+    search: (
+      <>
+        <circle cx="11" cy="11" r="7" />
+        <path d="m20 20-3.5-3.5" />
+      </>
+    ),
+  };
+
+  return (
+    <svg className="icon" aria-hidden="true" fill="none" viewBox="0 0 24 24">
+      {paths[name]}
+    </svg>
   );
 }
 
@@ -1356,6 +1831,45 @@ function getTomorrowDate() {
 
 function createIdempotencyKey() {
   return `booking-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function buildDestinationSpotlights(flights: FlightResponse[]): DestinationSpotlight[] {
+  const groupedFlights = new Map<string, FlightResponse[]>();
+
+  flights.forEach((flight) => {
+    const destinationFlights = groupedFlights.get(flight.destination) ?? [];
+    destinationFlights.push(flight);
+    groupedFlights.set(flight.destination, destinationFlights);
+  });
+
+  return [...groupedFlights.entries()]
+    .map(([airportCode, destinationFlights]) => {
+      const firstFlight = destinationFlights[0];
+      const content = destinationContent[airportCode];
+      const city = firstFlight.destinationCity ?? airportCode;
+      const prices = destinationFlights
+        .map((flight) => flight.basePriceCents)
+        .filter((price): price is number => Boolean(price));
+
+      return {
+        airportCode,
+        city,
+        country: firstFlight.destinationCountry,
+        flightCount: destinationFlights.length,
+        imageUrl: content?.imageUrl ?? fallbackDestinationImage,
+        sampleFlights: destinationFlights
+          .sort((a, b) => (a.basePriceCents ?? Number.MAX_SAFE_INTEGER) - (b.basePriceCents ?? Number.MAX_SAFE_INTEGER))
+          .slice(0, 5),
+        startingFare: prices.length > 0 ? Math.min(...prices) : undefined,
+        summary: content?.summary ?? `A flexible trip idea with ${destinationFlights.length} bookable flights.`,
+      };
+    })
+    .sort((a, b) => {
+      const fareDifference =
+        (a.startingFare ?? Number.MAX_SAFE_INTEGER) - (b.startingFare ?? Number.MAX_SAFE_INTEGER);
+      return fareDifference || b.flightCount - a.flightCount;
+    })
+    .slice(0, 8);
 }
 
 function recommendFlight(
