@@ -25,15 +25,48 @@ const steps: Array<{ id: BookingStep; label: string }> = [
   { id: "confirmation", label: "Confirmation" },
 ];
 
+const airportOptions = [
+  { code: "AMS", label: "Amsterdam Airport Schiphol", city: "Amsterdam" },
+  { code: "ARN", label: "Stockholm-Arlanda Airport", city: "Stockholm" },
+  { code: "ATH", label: "Athens International Airport", city: "Athens" },
+  { code: "BCN", label: "Barcelona Airport", city: "Barcelona" },
+  { code: "BER", label: "Berlin Brandenburg Airport", city: "Berlin" },
+  { code: "BRU", label: "Brussels Airport", city: "Brussels" },
+  { code: "BUD", label: "Budapest Airport", city: "Budapest" },
+  { code: "CDG", label: "Paris Charles de Gaulle", city: "Paris" },
+  { code: "CPH", label: "Copenhagen Airport", city: "Copenhagen" },
+  { code: "DOH", label: "Hamad International Airport", city: "Doha" },
+  { code: "DUB", label: "Dublin Airport", city: "Dublin" },
+  { code: "DXB", label: "Dubai International Airport", city: "Dubai" },
+  { code: "FCO", label: "Rome Fiumicino Airport", city: "Rome" },
+  { code: "FRA", label: "Frankfurt Airport", city: "Frankfurt" },
+  { code: "HND", label: "Tokyo Haneda Airport", city: "Tokyo" },
+  { code: "JFK", label: "John F. Kennedy International Airport", city: "New York" },
+  { code: "LAX", label: "Los Angeles International Airport", city: "Los Angeles" },
+  { code: "LHR", label: "London Heathrow Airport", city: "London" },
+  { code: "LIS", label: "Lisbon Airport", city: "Lisbon" },
+  { code: "MAD", label: "Madrid-Barajas Airport", city: "Madrid" },
+  { code: "MUC", label: "Munich Airport", city: "Munich" },
+  { code: "NRT", label: "Tokyo Narita Airport", city: "Tokyo" },
+  { code: "PEK", label: "Beijing Capital Airport", city: "Beijing" },
+  { code: "PVG", label: "Shanghai Pudong Airport", city: "Shanghai" },
+  { code: "SFO", label: "San Francisco International Airport", city: "San Francisco" },
+  { code: "SIN", label: "Singapore Changi Airport", city: "Singapore" },
+  { code: "SYD", label: "Sydney Airport", city: "Sydney" },
+  { code: "VIE", label: "Vienna International Airport", city: "Vienna" },
+  { code: "WAW", label: "Warsaw Chopin Airport", city: "Warsaw" },
+  { code: "ZRH", label: "Zurich Airport", city: "Zurich" },
+];
+
 export function App() {
   const [step, setStep] = useState<BookingStep>("search");
   const [flights, setFlights] = useState<FlightResponse[]>([]);
   const [selectedFlight, setSelectedFlight] = useState<FlightResponse | null>(null);
   const [seats, setSeats] = useState<SeatResponse[]>([]);
   const [selectedSeat, setSelectedSeat] = useState<SeatResponse | null>(null);
-  const [origin, setOrigin] = useState("");
-  const [destination, setDestination] = useState("");
-  const [travelDate, setTravelDate] = useState("");
+  const [origin, setOrigin] = useState("BER");
+  const [destination, setDestination] = useState("LIS");
+  const [travelDate, setTravelDate] = useState(getTomorrowDate());
   const [airlineCode, setAirlineCode] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
   const [cabinClass, setCabinClass] = useState("");
@@ -76,19 +109,16 @@ export function App() {
     setLoadingFlights(true);
     setStatusMessage("");
     try {
-      const data = await fetchFlights({
-        origin,
-        destination,
-        departureDate: travelDate,
-        airlineCode,
-        maxPriceCents: maxPrice ? Number(maxPrice) * 100 : undefined,
-        cabinClass,
-        directOnly,
-        departureTimeFrom,
-        departureTimeTo,
-      });
-      setFlights(data);
-      setSelectedFlight((current) => data.find((flight) => flight.id === current?.id) ?? null);
+      const data = await fetchFlights(searchParams());
+      if (data.length === 0 && hasActiveSearch()) {
+        const suggestedFlights = await fetchFallbackFlights();
+        setFlights(suggestedFlights);
+        setSelectedFlight(null);
+        setStatusMessage(fallbackMessage(suggestedFlights));
+      } else {
+        setFlights(data);
+        setSelectedFlight((current) => data.find((flight) => flight.id === current?.id) ?? null);
+      }
       setSelectedSeat(null);
       setReservation(null);
       if (nextStep !== "search") {
@@ -99,6 +129,75 @@ export function App() {
     } finally {
       setLoadingFlights(false);
     }
+  }
+
+  function searchParams() {
+    return {
+      origin,
+      destination,
+      departureDate: travelDate,
+      airlineCode,
+      maxPriceCents: maxPrice ? Number(maxPrice) * 100 : undefined,
+      cabinClass,
+      directOnly,
+      departureTimeFrom,
+      departureTimeTo,
+    };
+  }
+
+  async function fetchFallbackFlights() {
+    if (origin && destination) {
+      const sameRoute = await fetchFlights({ origin, destination, directOnly });
+      if (sameRoute.length > 0) {
+        return sameRoute;
+      }
+    }
+
+    if (origin) {
+      const sameOrigin = await fetchFlights({ origin, directOnly });
+      if (sameOrigin.length > 0) {
+        return sameOrigin;
+      }
+    }
+
+    if (destination) {
+      const sameDestination = await fetchFlights({ destination, directOnly });
+      if (sameDestination.length > 0) {
+        return sameDestination;
+      }
+    }
+
+    return fetchFlights();
+  }
+
+  function fallbackMessage(suggestedFlights: FlightResponse[]) {
+    if (suggestedFlights.length === 0) {
+      return "No flights are currently available. Please edit your search.";
+    }
+    if (origin && destination && suggestedFlights.every((flight) => flight.origin === origin && flight.destination === destination)) {
+      return "No exact match for the selected filters, so showing the same route on available dates.";
+    }
+    if (origin && suggestedFlights.every((flight) => flight.origin === origin)) {
+      return "No exact match for the selected filters, so showing flights from the same departure airport.";
+    }
+    if (destination && suggestedFlights.every((flight) => flight.destination === destination)) {
+      return "No exact match for the selected filters, so showing flights to the same destination.";
+    }
+    return "No exact matches were found, so here are available flights you can book now.";
+  }
+
+  function hasActiveSearch() {
+    return Boolean(
+      origin ||
+        destination ||
+        travelDate ||
+        airlineCode ||
+        maxPrice ||
+        cabinClass ||
+        departureTimeFrom ||
+        departureTimeTo ||
+        !directOnly
+    );
   }
 
   async function loadSeats(flightId: string) {
@@ -247,19 +346,19 @@ export function App() {
               </div>
               <div className="search-panel compact">
                 <Field label="From" htmlFor="origin">
-                  <input
+                  <AirportInput
                     id="origin"
                     placeholder="BER"
                     value={origin}
-                    onChange={(event) => setOrigin(event.target.value)}
+                    onChange={setOrigin}
                   />
                 </Field>
                 <Field label="To" htmlFor="destination">
-                  <input
+                  <AirportInput
                     id="destination"
                     placeholder="LIS"
                     value={destination}
-                    onChange={(event) => setDestination(event.target.value)}
+                    onChange={setDestination}
                   />
                 </Field>
                 <Field label="Departure" htmlFor="travelDate">
@@ -618,6 +717,40 @@ function Field({
   );
 }
 
+function AirportInput({
+  id,
+  onChange,
+  placeholder,
+  value,
+}: {
+  id: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  value: string;
+}) {
+  return (
+    <>
+      <input
+        autoComplete="off"
+        id={id}
+        list={`${id}-airport-options`}
+        placeholder={placeholder}
+        value={value}
+        onChange={(event) => onChange(event.target.value.toUpperCase())}
+      />
+      <datalist id={`${id}-airport-options`}>
+        {airportOptions.map((airport) => (
+          <option
+            key={airport.code}
+            value={airport.code}
+            label={`${airport.city} - ${airport.label}`}
+          />
+        ))}
+      </datalist>
+    </>
+  );
+}
+
 function FlightDetails({
   availableSeatCount,
   flight,
@@ -688,4 +821,10 @@ function formatDuration(value?: number) {
   const hours = Math.floor(value / 60);
   const minutes = value % 60;
   return `${hours}h ${minutes}m`;
+}
+
+function getTomorrowDate() {
+  const date = new Date();
+  date.setDate(date.getDate() + 1);
+  return date.toISOString().slice(0, 10);
 }

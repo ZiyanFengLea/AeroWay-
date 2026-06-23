@@ -243,12 +243,13 @@ h2 {
 .search-panel {
   display: grid;
   gap: 14px;
-  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .field {
   display: grid;
   gap: 8px;
+  min-width: 0;
 }
 
 label {
@@ -262,7 +263,9 @@ select {
   border: 1px solid #c9d3df;
   border-radius: 8px;
   min-height: 44px;
+  min-width: 0;
   padding: 0 12px;
+  width: 100%;
 }
 
 .checkbox-row {
@@ -274,7 +277,9 @@ select {
   font-weight: 900;
   gap: 10px;
   min-height: 44px;
+  min-width: 0;
   padding: 0 12px;
+  width: 100%;
 }
 
 .checkbox-row input {
