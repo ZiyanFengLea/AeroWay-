@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import {
   ApiError,
@@ -7,16 +7,28 @@ import {
   fetchFlights,
   fetchSeats,
   holdSeat,
-  runAvailabilityIntegrityCheck,
 } from "./api";
 import type {
-  AvailabilityIntegrityResponse,
   FlightResponse,
   ReservationResponse,
   SeatResponse,
 } from "./types";
 
 type BookingStep = "search" | "flights" | "seats" | "passenger" | "confirmation";
+type AppView = "booking" | "account";
+type UserProfile = {
+  name: string;
+  email: string;
+  documentNumber: string;
+  passengerType: string;
+};
+
+const defaultUserProfile: UserProfile = {
+  name: "Ziyan Feng",
+  email: "ziyan@example.com",
+  documentNumber: "P12345678",
+  passengerType: "ADULT",
+};
 
 const steps: Array<{ id: BookingStep; label: string }> = [
   { id: "search", label: "Search" },
@@ -59,7 +71,27 @@ const airportOptions = [
   { code: "ZRH", label: "Zurich Airport", city: "Zurich" },
 ];
 
+const airlineOptions = [
+  ["", "Any airline"],
+  ["AW", "AeroWay Airlines"],
+  ["LH", "Lufthansa"],
+  ["BA", "British Airways"],
+  ["AF", "Air France"],
+  ["KL", "KLM Royal Dutch Airlines"],
+  ["IB", "Iberia Airlines"],
+  ["EK", "Emirates"],
+  ["QR", "Qatar Airways"],
+  ["SQ", "Singapore Airlines"],
+  ["JL", "Japan Airlines"],
+  ["CA", "Air China"],
+  ["MU", "China Eastern Airlines"],
+  ["QF", "Qantas"],
+  ["UA", "United Airlines"],
+  ["DL", "Delta Air Lines"],
+] as const;
+
 export function App() {
+  const [view, setView] = useState<AppView>("booking");
   const [step, setStep] = useState<BookingStep>("search");
   const [flights, setFlights] = useState<FlightResponse[]>([]);
   const [selectedFlight, setSelectedFlight] = useState<FlightResponse | null>(null);
@@ -74,40 +106,35 @@ export function App() {
   const [departureTimeFrom, setDepartureTimeFrom] = useState("");
   const [departureTimeTo, setDepartureTimeTo] = useState("");
   const [directOnly, setDirectOnly] = useState(true);
-  const [customerName, setCustomerName] = useState("Ziyan Feng");
-  const [customerEmail, setCustomerEmail] = useState("ziyan@example.com");
-  const [documentNumber, setDocumentNumber] = useState("P12345678");
-  const [passengerType, setPassengerType] = useState("ADULT");
+  const [userProfile, setUserProfile] = useState<UserProfile>(() =>
+    readStoredValue("aeroway.userProfile", defaultUserProfile)
+  );
+  const [viewedFlights, setViewedFlights] = useState<FlightResponse[]>(() =>
+    readStoredValue("aeroway.viewedFlights", [])
+  );
+  const [favoriteFlights, setFavoriteFlights] = useState<FlightResponse[]>(() =>
+    readStoredValue("aeroway.favoriteFlights", [])
+  );
+  const [bookingRecords, setBookingRecords] = useState<ReservationResponse[]>(() =>
+    readStoredValue("aeroway.bookingRecords", [])
+  );
+  const [customerName, setCustomerName] = useState(() => userProfile.name);
+  const [customerEmail, setCustomerEmail] = useState(() => userProfile.email);
+  const [documentNumber, setDocumentNumber] = useState(() => userProfile.documentNumber);
+  const [passengerType, setPassengerType] = useState(() => userProfile.passengerType);
   const [statusMessage, setStatusMessage] = useState("");
   const [reservation, setReservation] = useState<ReservationResponse | null>(null);
-  const [integrityCheckResult, setIntegrityCheckResult] =
-    useState<AvailabilityIntegrityResponse | null>(null);
-  const [loadingFlights, setLoadingFlights] = useState(true);
+  const [loadingFlights, setLoadingFlights] = useState(false);
   const [loadingSeats, setLoadingSeats] = useState(false);
   const [reserving, setReserving] = useState(false);
   const [holdingSeat, setHoldingSeat] = useState(false);
-  const [runningIntegrityCheck, setRunningIntegrityCheck] = useState(false);
   const [confirmIdempotencyKey, setConfirmIdempotencyKey] = useState(() => createIdempotencyKey());
   const [simulatePaymentFailure, setSimulatePaymentFailure] = useState(false);
-
-  useEffect(() => {
-    loadFlights("search");
-  }, []);
 
   const availableSeatCount = useMemo(
     () => seats.filter((seat) => !seat.reserved).length,
     [seats]
   );
-
-  const airlineOptions = useMemo(() => {
-    const options = new Map<string, string>();
-    flights.forEach((flight) => {
-      if (flight.airlineCode) {
-        options.set(flight.airlineCode, flight.airlineName ?? flight.airlineCode);
-      }
-    });
-    return [...options.entries()].sort((a, b) => a[1].localeCompare(b[1]));
-  }, [flights]);
 
   async function loadFlights(nextStep: BookingStep = "flights") {
     setLoadingFlights(true);
@@ -216,7 +243,53 @@ export function App() {
     }
   }
 
+  function updateUserProfile(nextProfile: UserProfile) {
+    setUserProfile(nextProfile);
+    storeValue("aeroway.userProfile", nextProfile);
+    setCustomerName(nextProfile.name);
+    setCustomerEmail(nextProfile.email);
+    setDocumentNumber(nextProfile.documentNumber);
+    setPassengerType(nextProfile.passengerType);
+  }
+
+  function rememberViewedFlight(flight: FlightResponse) {
+    setViewedFlights((current) => {
+      const next = [flight, ...current.filter((item) => item.id !== flight.id)].slice(0, 8);
+      storeValue("aeroway.viewedFlights", next);
+      return next;
+    });
+  }
+
+  function toggleFavoriteFlight(flight: FlightResponse) {
+    setFavoriteFlights((current) => {
+      const exists = current.some((item) => item.id === flight.id);
+      const next = exists
+        ? current.filter((item) => item.id !== flight.id)
+        : [flight, ...current].slice(0, 12);
+      storeValue("aeroway.favoriteFlights", next);
+      return next;
+    });
+  }
+
+  function isFavoriteFlight(flightId: string) {
+    return favoriteFlights.some((flight) => flight.id === flightId);
+  }
+
+  function rememberBooking(record: ReservationResponse) {
+    setBookingRecords((current) => {
+      const next = [record, ...current.filter((item) => item.reservationId !== record.reservationId)];
+      storeValue("aeroway.bookingRecords", next);
+      return next;
+    });
+  }
+
+  async function openFlightFromAccount(flight: FlightResponse) {
+    setView("booking");
+    await chooseFlight(flight);
+  }
+
   async function chooseFlight(flight: FlightResponse) {
+    rememberViewedFlight(flight);
     setSelectedFlight(flight);
     setSelectedSeat(null);
     setReservation(null);
@@ -281,6 +354,8 @@ export function App() {
         passengerType
       );
       setReservation(response);
+      rememberBooking(response);
+      updateUserProfile({ name: customerName, email: customerEmail, documentNumber, passengerType });
       await loadSeats(selectedFlight.id);
       setStep("confirmation");
     } catch (error) {
@@ -296,19 +371,6 @@ export function App() {
     }
   }
 
-  async function handleRunIntegrityCheck() {
-    setRunningIntegrityCheck(true);
-    setIntegrityCheckResult(null);
-    setStatusMessage("");
-    try {
-      setIntegrityCheckResult(await runAvailabilityIntegrityCheck());
-    } catch {
-      setStatusMessage("Availability check could not be completed. Please check the booking service.");
-    } finally {
-      setRunningIntegrityCheck(false);
-    }
-  }
-
   async function handleCancelReservation() {
     if (!reservation || !selectedFlight) {
       return;
@@ -317,6 +379,7 @@ export function App() {
     try {
       const cancelled = await cancelReservation(reservation.reservationId);
       setReservation(cancelled);
+      rememberBooking(cancelled);
       await loadSeats(selectedFlight.id);
     } catch {
       setStatusMessage("Booking could not be cancelled. Please try again.");
@@ -340,11 +403,39 @@ export function App() {
           <strong>AeroWay</strong>
           <span>Flight booking</span>
         </div>
-        <a href="http://localhost:8080/swagger-ui/index.html" target="_blank" rel="noreferrer">
-          API docs
-        </a>
+        <nav className="site-nav" aria-label="Main navigation">
+          <button
+            className={view === "booking" ? "nav-active" : ""}
+            type="button"
+            onClick={() => setView("booking")}
+          >
+            Book
+          </button>
+          <button
+            className={view === "account" ? "nav-active" : ""}
+            type="button"
+            onClick={() => setView("account")}
+          >
+            My account
+          </button>
+          <a href="http://localhost:8080/swagger-ui/index.html" target="_blank" rel="noreferrer">
+            API docs
+          </a>
+        </nav>
       </header>
 
+      {view === "account" ? (
+        <UserAccount
+          bookingRecords={bookingRecords}
+          favoriteFlights={favoriteFlights}
+          isFavoriteFlight={isFavoriteFlight}
+          onBookFlight={openFlightFromAccount}
+          onProfileChange={updateUserProfile}
+          onToggleFavorite={toggleFavoriteFlight}
+          profile={userProfile}
+          viewedFlights={viewedFlights}
+        />
+      ) : (
       <section className="booking-shell">
         <aside className="trip-summary">
           <p className="eyebrow">Your trip</p>
@@ -414,7 +505,6 @@ export function App() {
                     value={airlineCode}
                     onChange={(event) => setAirlineCode(event.target.value)}
                   >
-                    <option value="">Any airline</option>
                     {airlineOptions.map(([code, name]) => (
                       <option key={code} value={code}>
                         {name}
@@ -492,28 +582,16 @@ export function App() {
               {loadingFlights ? (
                 <p className="muted">Loading flights...</p>
               ) : (
-                <div className="flight-list">
-                  {flights.map((flight) => (
-                    <button className="flight-row" key={flight.id} onClick={() => chooseFlight(flight)}>
-                      <div className="flight-main">
-                        <strong>{flight.flightNumber}</strong>
-                        <span>{flight.airlineName ?? "AeroWay Partner"}</span>
-                      </div>
-                      <span className="route-line">
-                        {flight.origin} {flight.originCity ? `(${flight.originCity})` : ""} to{" "}
-                        {flight.destination}{" "}
-                        {flight.destinationCity ? `(${flight.destinationCity})` : ""}
-                      </span>
-                      <small>
-                        {formatDate(flight.departureTime)}
-                        {flight.durationMinutes ? ` · ${formatDuration(flight.durationMinutes)}` : ""}
-                        {flight.equipment ? ` · ${flight.equipment}` : ""}
-                      </small>
-                      <span className="price">
-                        {flight.basePriceCents ? `from ${formatPrice(flight.basePriceCents)}` : "Price pending"}
-                      </span>
-                    </button>
-                  ))}
+	                <div className="flight-list">
+	                  {flights.map((flight) => (
+	                    <FlightRow
+	                      flight={flight}
+	                      isFavorite={isFavoriteFlight(flight.id)}
+	                      key={flight.id}
+	                      onChoose={chooseFlight}
+	                      onToggleFavorite={toggleFavoriteFlight}
+	                    />
+	                  ))}
                   {flights.length === 0 && (
                     <p className="muted">No flights match your current search.</p>
                   )}
@@ -709,40 +787,255 @@ export function App() {
                 </button>
               </div>
             </section>
-          )}
+	          )}
 
-          <section className="booking-card availability-card">
-            <div className="card-heading split">
-              <div>
-                <p className="eyebrow">Seat availability</p>
-                <h2>Protection check</h2>
-              </div>
-              <button className="primary" disabled={runningIntegrityCheck} onClick={handleRunIntegrityCheck}>
-                {runningIntegrityCheck ? "Checking..." : "Run 100 booking attempts"}
-              </button>
-            </div>
-            <div className="integrity-grid">
-              {integrityCheckResult ? (
-                <>
-                  <ResultCard label="Attempts" value={integrityCheckResult.attempts} />
-                  <ResultCard label="Confirmed" value={integrityCheckResult.successfulReservations} />
-                  <ResultCard label="Conflicts" value={integrityCheckResult.conflicts} />
-                  <ResultCard
-                    label="Duplicates stored"
-                    value={integrityCheckResult.duplicateReservationsInDatabase}
-                  />
-                </>
-              ) : (
-                <p className="muted">
-                  Run this check to verify that only one booking is stored when many customers try
-                  to reserve the same seat at the same time.
-                </p>
-              )}
-            </div>
-          </section>
+	        </section>
+	      </section>
+	      )}
+	    </main>
+	  );
+}
+
+function FlightRow({
+  flight,
+  isFavorite,
+  onChoose,
+  onToggleFavorite,
+}: {
+  flight: FlightResponse;
+  isFavorite: boolean;
+  onChoose: (flight: FlightResponse) => void;
+  onToggleFavorite: (flight: FlightResponse) => void;
+}) {
+  return (
+    <article className="flight-row">
+      <div className="flight-main">
+        <strong>{flight.flightNumber}</strong>
+        <span>{flight.airlineName ?? "AeroWay Partner"}</span>
+      </div>
+      <span className="route-line">
+        {flight.origin} {flight.originCity ? `(${flight.originCity})` : ""} to {flight.destination}{" "}
+        {flight.destinationCity ? `(${flight.destinationCity})` : ""}
+      </span>
+      <small>
+        {formatDate(flight.departureTime)}
+        {flight.durationMinutes ? ` · ${formatDuration(flight.durationMinutes)}` : ""}
+        {flight.equipment ? ` · ${flight.equipment}` : ""}
+      </small>
+      <div className="flight-actions">
+        <span className="price">
+          {flight.basePriceCents ? `from ${formatPrice(flight.basePriceCents)}` : "Price pending"}
+        </span>
+        <button type="button" onClick={() => onToggleFavorite(flight)}>
+          {isFavorite ? "Saved" : "Save"}
+        </button>
+        <button className="primary" type="button" onClick={() => onChoose(flight)}>
+          Select flight
+        </button>
+      </div>
+    </article>
+  );
+}
+
+function UserAccount({
+  bookingRecords,
+  favoriteFlights,
+  isFavoriteFlight,
+  onBookFlight,
+  onProfileChange,
+  onToggleFavorite,
+  profile,
+  viewedFlights,
+}: {
+  bookingRecords: ReservationResponse[];
+  favoriteFlights: FlightResponse[];
+  isFavoriteFlight: (flightId: string) => boolean;
+  onBookFlight: (flight: FlightResponse) => void;
+  onProfileChange: (profile: UserProfile) => void;
+  onToggleFavorite: (flight: FlightResponse) => void;
+  profile: UserProfile;
+  viewedFlights: FlightResponse[];
+}) {
+  function updateProfileField(field: keyof UserProfile, value: string) {
+    onProfileChange({ ...profile, [field]: value });
+  }
+
+  return (
+    <section className="account-shell">
+      <div className="account-hero">
+        <div>
+          <p className="eyebrow">My account</p>
+          <h1>Your AeroWay trips</h1>
+          <p className="muted">
+            Manage passenger details, saved flights, recent searches, and booking records in one place.
+          </p>
+        </div>
+        <div className="account-stats" aria-label="Account summary">
+          <span>
+            <strong>{bookingRecords.length}</strong>
+            bookings
+          </span>
+          <span>
+            <strong>{favoriteFlights.length}</strong>
+            saved
+          </span>
+          <span>
+            <strong>{viewedFlights.length}</strong>
+            viewed
+          </span>
+        </div>
+      </div>
+
+      <div className="account-grid">
+        <section className="account-card profile-card">
+          <div className="card-heading">
+            <p className="eyebrow">Passenger profile</p>
+            <h2>Basic information</h2>
+          </div>
+          <div className="profile-grid">
+            <Field label="Full name" htmlFor="accountName">
+              <input
+                id="accountName"
+                value={profile.name}
+                onChange={(event) => updateProfileField("name", event.target.value)}
+              />
+            </Field>
+            <Field label="Email" htmlFor="accountEmail">
+              <input
+                id="accountEmail"
+                type="email"
+                value={profile.email}
+                onChange={(event) => updateProfileField("email", event.target.value)}
+              />
+            </Field>
+            <Field label="Passport or document number" htmlFor="accountDocument">
+              <input
+                id="accountDocument"
+                value={profile.documentNumber}
+                onChange={(event) => updateProfileField("documentNumber", event.target.value)}
+              />
+            </Field>
+            <Field label="Passenger type" htmlFor="accountPassengerType">
+              <select
+                id="accountPassengerType"
+                value={profile.passengerType}
+                onChange={(event) => updateProfileField("passengerType", event.target.value)}
+              >
+                <option value="ADULT">Adult</option>
+                <option value="STUDENT">Student</option>
+                <option value="CHILD">Child</option>
+              </select>
+            </Field>
+          </div>
         </section>
-      </section>
-    </main>
+
+        <section className="account-card">
+          <div className="card-heading">
+            <p className="eyebrow">Purchase history</p>
+            <h2>Bookings</h2>
+          </div>
+          <BookingRecordList records={bookingRecords} />
+        </section>
+
+        <section className="account-card">
+          <div className="card-heading">
+            <p className="eyebrow">Saved flights</p>
+            <h2>Favorites</h2>
+          </div>
+          <FlightMiniList
+            emptyText="No saved flights yet."
+            flights={favoriteFlights}
+            isFavoriteFlight={isFavoriteFlight}
+            onBookFlight={onBookFlight}
+            onToggleFavorite={onToggleFavorite}
+          />
+        </section>
+
+        <section className="account-card">
+          <div className="card-heading">
+            <p className="eyebrow">Recently viewed</p>
+            <h2>Browsing history</h2>
+          </div>
+          <FlightMiniList
+            emptyText="Viewed flights will appear here."
+            flights={viewedFlights}
+            isFavoriteFlight={isFavoriteFlight}
+            onBookFlight={onBookFlight}
+            onToggleFavorite={onToggleFavorite}
+          />
+        </section>
+      </div>
+    </section>
+  );
+}
+
+function FlightMiniList({
+  emptyText,
+  flights,
+  isFavoriteFlight,
+  onBookFlight,
+  onToggleFavorite,
+}: {
+  emptyText: string;
+  flights: FlightResponse[];
+  isFavoriteFlight: (flightId: string) => boolean;
+  onBookFlight: (flight: FlightResponse) => void;
+  onToggleFavorite: (flight: FlightResponse) => void;
+}) {
+  if (flights.length === 0) {
+    return <p className="muted empty-state">{emptyText}</p>;
+  }
+
+  return (
+    <div className="saved-list">
+      {flights.map((flight) => (
+        <article className="saved-item" key={flight.id}>
+          <div>
+            <strong>{flight.flightNumber}</strong>
+            <span>
+              {flight.origin} to {flight.destination}
+            </span>
+            <small>
+              {formatDate(flight.departureTime)}
+              {flight.basePriceCents ? ` · ${formatPrice(flight.basePriceCents)}` : ""}
+            </small>
+          </div>
+          <div className="saved-actions">
+            <button type="button" onClick={() => onToggleFavorite(flight)}>
+              {isFavoriteFlight(flight.id) ? "Saved" : "Save"}
+            </button>
+            <button className="primary" type="button" onClick={() => onBookFlight(flight)}>
+              Book
+            </button>
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function BookingRecordList({ records }: { records: ReservationResponse[] }) {
+  if (records.length === 0) {
+    return <p className="muted empty-state">Completed bookings will appear here.</p>;
+  }
+
+  return (
+    <div className="record-list">
+      {records.map((record) => (
+        <article className="record-item" key={record.reservationId}>
+          <div>
+            <strong>{record.bookingReference ?? record.reservationId}</strong>
+            <span>
+              {record.flightNumber}: {record.origin} to {record.destination}
+            </span>
+            <small>
+              Seat {record.seatNumber} · {record.customerName} · {formatDate(record.createdAt)}
+            </small>
+          </div>
+          <span className={`status-pill ${record.status.toLowerCase()}`}>{record.status}</span>
+        </article>
+      ))}
+    </div>
   );
 }
 
@@ -856,15 +1149,6 @@ function FlightDetails({
   );
 }
 
-function ResultCard({ label, value }: { label: string; value: number }) {
-  return (
-    <article className="result-card">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </article>
-  );
-}
-
 function formatDate(value: string) {
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: "medium",
@@ -896,4 +1180,29 @@ function getTomorrowDate() {
 
 function createIdempotencyKey() {
   return `booking-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function readStoredValue<T>(key: string, fallback: T): T {
+  if (typeof window === "undefined") {
+    return fallback;
+  }
+
+  try {
+    const storedValue = window.localStorage.getItem(key);
+    return storedValue ? (JSON.parse(storedValue) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function storeValue<T>(key: string, value: T) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Browsing data is helpful for the product experience, but booking should keep working without it.
+  }
 }

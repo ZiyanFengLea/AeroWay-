@@ -85,6 +85,18 @@ button:disabled {
   font-weight: 800;
 }
 
+.site-nav {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.site-nav button.nav-active {
+  background: #ecfdf5;
+  border-color: #0f766e;
+  color: #0f766e;
+}
+
 .booking-shell {
   display: grid;
   gap: 24px;
@@ -95,7 +107,9 @@ button:disabled {
 }
 
 .trip-summary,
-.booking-card {
+.booking-card,
+.account-card,
+.account-hero {
   background: #ffffff;
   border: 1px solid #d9e2ec;
   border-radius: 8px;
@@ -127,6 +141,67 @@ button:disabled {
 .booking-main {
   display: grid;
   gap: 18px;
+}
+
+.account-shell {
+  display: grid;
+  gap: 24px;
+  margin: 0 auto;
+  max-width: 1240px;
+  padding: 32px clamp(18px, 4vw, 44px) 48px;
+}
+
+.account-hero {
+  align-items: end;
+  display: flex;
+  gap: 24px;
+  justify-content: space-between;
+  padding: 28px;
+}
+
+.account-hero h1 {
+  margin-bottom: 10px;
+}
+
+.account-stats {
+  display: flex;
+  gap: 10px;
+}
+
+.account-stats span {
+  background: #f8fafc;
+  border: 1px solid #d9e2ec;
+  border-radius: 8px;
+  display: grid;
+  gap: 3px;
+  min-width: 96px;
+  padding: 12px 14px;
+  text-align: center;
+}
+
+.account-stats strong {
+  color: #0f766e;
+  font-size: 1.35rem;
+}
+
+.account-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.account-card {
+  padding: 24px;
+}
+
+.profile-card {
+  grid-column: 1 / -1;
+}
+
+.profile-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .eyebrow {
@@ -166,6 +241,8 @@ h2 {
 .summary-line span,
 .muted,
 .flight-row small,
+.saved-item small,
+.record-item small,
 .seat-card span,
 .fare-card span {
   color: #64748b;
@@ -310,12 +387,20 @@ select {
 
 .flight-row {
   align-items: flex-start;
+  background: #ffffff;
+  border: 1px solid #c9d3df;
+  border-radius: 8px;
   display: grid;
   gap: 8px;
   justify-items: start;
   min-height: 128px;
+  padding: 16px;
   text-align: left;
   width: 100%;
+}
+
+.flight-row:hover {
+  border-color: #0f766e;
 }
 
 .flight-main {
@@ -349,6 +434,77 @@ select {
   color: #047857;
   font-weight: 900;
   padding: 6px 10px;
+}
+
+.flight-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+  width: 100%;
+}
+
+.saved-list,
+.record-list {
+  display: grid;
+  gap: 12px;
+}
+
+.saved-item,
+.record-item {
+  border: 1px solid #d9e2ec;
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.record-item {
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.saved-item > div:first-child,
+.record-item > div:first-child {
+  display: grid;
+  gap: 5px;
+}
+
+.saved-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.status-pill {
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 900;
+  padding: 6px 10px;
+}
+
+.status-pill.confirmed {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.status-pill.cancelled,
+.status-pill.payment_failed {
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.status-pill.held {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.empty-state {
+  border: 1px dashed #c9d3df;
+  border-radius: 8px;
+  margin-bottom: 0;
+  padding: 16px;
 }
 
 .detail-grid {
@@ -442,38 +598,24 @@ form {
   gap: 14px;
 }
 
-.availability-card {
-  margin-top: 6px;
-}
-
-.integrity-grid {
-  display: grid;
-  gap: 14px;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-}
-
-.result-card {
-  background: #f8fafc;
-  border: 1px solid #d9e2ec;
-  border-radius: 8px;
-  min-height: 118px;
-  padding: 18px;
-}
-
-.result-card span {
-  color: #64748b;
-  display: block;
-  font-weight: 900;
-  margin-bottom: 14px;
-}
-
-.result-card strong {
-  color: #0f766e;
-  font-size: 2.35rem;
-}
-
 @media (max-width: 980px) {
   .booking-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .site-header,
+  .account-hero {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .site-nav,
+  .account-stats {
+    flex-wrap: wrap;
+  }
+
+  .account-grid,
+  .profile-grid {
     grid-template-columns: 1fr;
   }
 
