@@ -215,9 +215,14 @@ public class FlightRepository {
                 rs.getString("destination_city"),
                 rs.getString("destination_country"),
                 rs.getString("equipment"),
-                rs.getObject("base_price_cents", Integer.class),
-                rs.getObject("available_seat_count", Integer.class),
-                rs.getObject("duration_minutes", Integer.class)
+                nullableInt(rs, "base_price_cents"),
+                nullableInt(rs, "available_seat_count"),
+                nullableInt(rs, "duration_minutes")
         );
+    }
+
+    private Integer nullableInt(ResultSet rs, String columnName) throws SQLException {
+        int value = rs.getInt(columnName);
+        return rs.wasNull() ? null : value;
     }
 }
