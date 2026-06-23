@@ -23,6 +23,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SuppressWarnings("resource")
 class FlightServiceIntegrationTest {
 
     private static final UUID FLIGHT_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
