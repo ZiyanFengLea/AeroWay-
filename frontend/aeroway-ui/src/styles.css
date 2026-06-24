@@ -245,13 +245,6 @@ button:disabled {
   padding: 0 24px;
 }
 
-.welcome-sound {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.38);
-  color: #ffffff;
-  min-height: 54px;
-}
-
 .welcome-progress {
   background: rgba(255, 255, 255, 0.22);
   border-radius: 999px;

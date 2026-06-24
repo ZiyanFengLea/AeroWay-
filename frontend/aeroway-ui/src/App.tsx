@@ -114,6 +114,18 @@ const airlineOptions = [
 ] as const;
 
 const destinationContent: Record<string, { imageUrl: string; summary: string }> = {
+  AMS: {
+    imageUrl: "https://images.unsplash.com/photo-1512470876302-972faa2aa9a4?auto=format&fit=crop&w=1200&q=80",
+    summary: "Canals, galleries, bikes, and soft evening light by the water.",
+  },
+  ARN: {
+    imageUrl: "https://images.unsplash.com/photo-1509356843151-3e7d96241e11?auto=format&fit=crop&w=1200&q=80",
+    summary: "Island views, clean design, and calm Nordic city weekends.",
+  },
+  ATH: {
+    imageUrl: "https://images.unsplash.com/photo-1555993539-1732b0258235?auto=format&fit=crop&w=1200&q=80",
+    summary: "Ancient hills, bright coastlines, and late dinners under warm skies.",
+  },
   BCN: {
     imageUrl: "https://images.unsplash.com/photo-1539037116277-4db20889f2d4?auto=format&fit=crop&w=1200&q=80",
     summary: "Mediterranean evenings, Gaudi landmarks, and easy beach days.",
@@ -126,21 +138,49 @@ const destinationContent: Record<string, { imageUrl: string; summary: string }> 
     imageUrl: "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=1200&q=80",
     summary: "Classic boulevards, galleries, cafes, and a long-weekend glow.",
   },
+  CPH: {
+    imageUrl: "https://images.unsplash.com/photo-1513622470522-26c3c8a854bc?auto=format&fit=crop&w=1200&q=80",
+    summary: "Harbor swims, design streets, and easy Scandinavian food stops.",
+  },
+  DUB: {
+    imageUrl: "https://images.unsplash.com/photo-1549918864-48ac978761a4?auto=format&fit=crop&w=1200&q=80",
+    summary: "Cozy pubs, coastal walks, and a warm city break atmosphere.",
+  },
   DXB: {
     imageUrl: "https://images.unsplash.com/photo-1512453979798-5ea266f8880c?auto=format&fit=crop&w=1200&q=80",
     summary: "Sunset skylines, warm beaches, and polished stopover energy.",
+  },
+  EDI: {
+    imageUrl: "https://images.unsplash.com/photo-1506377585622-bedcbb027afc?auto=format&fit=crop&w=1200&q=80",
+    summary: "Castle views, stone streets, and dramatic Scottish weekend scenery.",
   },
   FCO: {
     imageUrl: "https://images.unsplash.com/photo-1529260830199-42c24126f198?auto=format&fit=crop&w=1200&q=80",
     summary: "Ancient streets, open-air dining, and slow golden afternoons.",
   },
+  FRA: {
+    imageUrl: "https://images.unsplash.com/photo-1508375052021-249ee3d7e2ec?auto=format&fit=crop&w=1200&q=80",
+    summary: "Riverfront skyline walks, museums, and efficient onward connections.",
+  },
   JFK: {
     imageUrl: "https://images.unsplash.com/photo-1485871981521-5b1fd3805eee?auto=format&fit=crop&w=1200&q=80",
     summary: "Big-city momentum, landmark views, and neighborhoods made for wandering.",
   },
+  LHR: {
+    imageUrl: "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?auto=format&fit=crop&w=1200&q=80",
+    summary: "Royal parks, riverside walks, West End nights, and classic city energy.",
+  },
   LIS: {
     imageUrl: "https://images.unsplash.com/photo-1500930287596-c1ecaa373bb2?auto=format&fit=crop&w=1200&q=80",
     summary: "Ocean air, tiled streets, hilltop views, and easy Atlantic light.",
+  },
+  MAD: {
+    imageUrl: "https://images.unsplash.com/photo-1539037116277-4db20889f2d4?auto=format&fit=crop&w=1200&q=80",
+    summary: "Late dinners, museum days, and sunlit plazas made for wandering.",
+  },
+  MUC: {
+    imageUrl: "https://images.unsplash.com/photo-1595867818082-083862f3d630?auto=format&fit=crop&w=1200&q=80",
+    summary: "Bavarian squares, beer gardens, and alpine day-trip possibilities.",
   },
   NRT: {
     imageUrl: "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?auto=format&fit=crop&w=1200&q=80",
@@ -154,10 +194,21 @@ const destinationContent: Record<string, { imageUrl: string; summary: string }> 
     imageUrl: "https://images.unsplash.com/photo-1525625293386-3f8f99389edd?auto=format&fit=crop&w=1200&q=80",
     summary: "Garden-city design, night markets, and seamless tropical stopovers.",
   },
+  VIE: {
+    imageUrl: "https://images.unsplash.com/photo-1516550893923-42d28e5677af?auto=format&fit=crop&w=1200&q=80",
+    summary: "Grand cafes, music halls, and elegant streets for slow travel.",
+  },
+  WAW: {
+    imageUrl: "https://images.unsplash.com/photo-1519197924294-4ba991a11128?auto=format&fit=crop&w=1200&q=80",
+    summary: "Historic squares, modern food spots, and an easy city-break rhythm.",
+  },
+  ZRH: {
+    imageUrl: "https://images.unsplash.com/photo-1515488764276-beab7607c1e6?auto=format&fit=crop&w=1200&q=80",
+    summary: "Lake views, crisp old-town walks, and mountain air within reach.",
+  },
 };
 
-const fallbackDestinationImage =
-  "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=80";
+const fallbackDestinationImage = "https://source.unsplash.com/1200x800/?";
 
 export function App() {
   const [showWelcome, setShowWelcome] = useState(true);
@@ -1036,17 +1087,10 @@ export function App() {
 
 function WelcomeScreen({ onEnter }: { onEnter: () => void }) {
   const [entering, setEntering] = useState(false);
-  const [soundEnabled, setSoundEnabled] = useState(true);
-  const stopAmbienceRef = useRef<(() => void) | null>(null);
 
   function enterBooking() {
     setEntering(true);
-    if (soundEnabled) {
-      stopAmbienceRef.current = startOceanAmbience();
-    }
-
     window.setTimeout(() => {
-      stopAmbienceRef.current?.();
       onEnter();
     }, 1800);
   }
@@ -1079,14 +1123,6 @@ function WelcomeScreen({ onEnter }: { onEnter: () => void }) {
         <div className="welcome-actions">
           <button className="primary welcome-primary" disabled={entering} type="button" onClick={enterBooking}>
             {entering ? "Preparing your trip..." : "Enter booking"}
-          </button>
-          <button
-            className="welcome-sound"
-            disabled={entering}
-            type="button"
-            onClick={() => setSoundEnabled((current) => !current)}
-          >
-            {soundEnabled ? "Wave sound on" : "Wave sound off"}
           </button>
         </div>
         <div className="welcome-progress" aria-hidden={!entering}>
@@ -1856,7 +1892,7 @@ function buildDestinationSpotlights(flights: FlightResponse[]): DestinationSpotl
         city,
         country: firstFlight.destinationCountry,
         flightCount: destinationFlights.length,
-        imageUrl: content?.imageUrl ?? fallbackDestinationImage,
+        imageUrl: content?.imageUrl ?? destinationFallbackImage(city),
         sampleFlights: destinationFlights
           .sort((a, b) => (a.basePriceCents ?? Number.MAX_SAFE_INTEGER) - (b.basePriceCents ?? Number.MAX_SAFE_INTEGER))
           .slice(0, 5),
@@ -1870,6 +1906,11 @@ function buildDestinationSpotlights(flights: FlightResponse[]): DestinationSpotl
       return fareDifference || b.flightCount - a.flightCount;
     })
     .slice(0, 8);
+}
+
+function destinationFallbackImage(city: string) {
+  const query = encodeURIComponent(`${city} travel city`);
+  return `${fallbackDestinationImage}${query}`;
 }
 
 function recommendFlight(
@@ -2026,57 +2067,6 @@ function adjacentSeatLetters(letter: string) {
   const order = ["A", "B", "C", "D", "E", "F"];
   const index = order.indexOf(letter);
   return [order[index - 1], order[index + 1]].filter(Boolean);
-}
-
-function startOceanAmbience() {
-  if (typeof window === "undefined") {
-    return () => undefined;
-  }
-
-  const AudioContextClass =
-    window.AudioContext ||
-    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-
-  if (!AudioContextClass) {
-    return () => undefined;
-  }
-
-  const audioContext = new AudioContextClass();
-  const frameCount = audioContext.sampleRate * 3;
-  const buffer = audioContext.createBuffer(1, frameCount, audioContext.sampleRate);
-  const channelData = buffer.getChannelData(0);
-  let lastValue = 0;
-
-  for (let i = 0; i < frameCount; i += 1) {
-    const white = Math.random() * 2 - 1;
-    lastValue = lastValue * 0.985 + white * 0.015;
-    const swell = 0.55 + Math.sin((i / audioContext.sampleRate) * Math.PI * 1.4) * 0.28;
-    channelData[i] = lastValue * swell;
-  }
-
-  const source = audioContext.createBufferSource();
-  const lowpass = audioContext.createBiquadFilter();
-  const gain = audioContext.createGain();
-
-  source.buffer = buffer;
-  source.loop = true;
-  lowpass.type = "lowpass";
-  lowpass.frequency.value = 760;
-  gain.gain.setValueAtTime(0.0001, audioContext.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.16, audioContext.currentTime + 0.6);
-
-  source.connect(lowpass);
-  lowpass.connect(gain);
-  gain.connect(audioContext.destination);
-  source.start();
-
-  return () => {
-    gain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.35);
-    window.setTimeout(() => {
-      source.stop();
-      audioContext.close();
-    }, 420);
-  };
 }
 
 function readStoredValue<T>(key: string, fallback: T): T {
