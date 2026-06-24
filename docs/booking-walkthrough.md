@@ -16,10 +16,6 @@ AeroWay is a flight booking application focused on reliable seat reservations. A
 8. Review the confirmation details.
 9. Cancel the booking if needed and confirm that the seat becomes available again.
 
-## Availability Integrity Check
-
-AeroWay includes an operational check that sends 100 concurrent booking attempts for one temporary seat. The expected result is one confirmed booking, 99 rejected conflicts, and zero duplicate bookings stored in the database.
-
 ## Engineering Value
 
-The application demonstrates a clean frontend booking flow, a Spring Boot REST backend, JDBC-based persistence, PostgreSQL transaction handling, OpenAPI documentation, and automated tests for a realistic high-concurrency reservation problem.
+The application demonstrates a clean frontend booking flow, a Spring Boot REST backend, JDBC-based persistence, PostgreSQL transaction handling, OpenAPI documentation, and automated tests for realistic high-concurrency reservation problems.

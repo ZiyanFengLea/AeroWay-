@@ -22,10 +22,12 @@ Application checks are useful for user experience, but they are not a final corr
 AeroWay uses PostgreSQL as the source of truth. The reservation table has a unique constraint:
 
 ```sql
-CONSTRAINT uk_reservation_per_flight_seat UNIQUE (flight_id, seat_id)
+CREATE UNIQUE INDEX uk_active_reservation_per_flight_seat
+    ON seat_reservations(flight_id, seat_id)
+    WHERE status IN ('HELD', 'CONFIRMED');
 ```
 
-When 100 requests race to reserve the same seat, PostgreSQL allows one insert and rejects the rest. The service catches the duplicate-key violation and maps it to:
+When 100 requests race to reserve or hold the same seat, PostgreSQL allows one active booking state and rejects the rest. The service catches the duplicate-key violation and maps it to:
 
 ```http
 HTTP/1.1 409 Conflict
@@ -40,10 +42,8 @@ HTTP/1.1 409 Conflict
 
 ## What The Automated Test Proves
 
-The concurrency test starts 100 reservation attempts at nearly the same time using Java concurrency utilities. The expected result is:
+The concurrency tests start 100 reservation or hold attempts at nearly the same time using Java concurrency utilities. The expected result is:
 
-- `1` successful reservation.
-- `99` duplicate-reservation conflicts.
+- `1` successful reservation or hold.
+- `99` duplicate active-seat conflicts.
 - `1` database row for the flight-seat pair.
-
-The availability integrity check uses the same idea, but creates a fresh temporary flight and seat every time so the check is repeatable.

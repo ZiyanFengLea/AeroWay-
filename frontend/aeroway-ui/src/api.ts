@@ -1,5 +1,4 @@
 import type {
-  AvailabilityIntegrityResponse,
   ErrorResponse,
   FlightResponse,
   ReservationResponse,
@@ -114,12 +113,6 @@ export function confirmBooking(
 
 export function cancelReservation(reservationId: string): Promise<ReservationResponse> {
   return request<ReservationResponse>(`/api/reservations/${reservationId}/cancel`, {
-    method: "POST",
-  });
-}
-
-export function runAvailabilityIntegrityCheck(): Promise<AvailabilityIntegrityResponse> {
-  return request<AvailabilityIntegrityResponse>("/api/availability/integrity-check", {
     method: "POST",
   });
 }

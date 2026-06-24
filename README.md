@@ -19,7 +19,7 @@ The sample flight inventory is generated from public OpenFlights airport, airlin
 - View booking confirmation details
 - Cancel confirmed bookings and release the seat back into inventory
 - Receive clear conflict feedback when a seat is already booked
-- Validate availability integrity under high-concurrency booking attempts
+- Validate double-booking protection with automated high-concurrency tests
 
 ## Tech Stack
 
@@ -85,11 +85,11 @@ Open:
 7. Review the booking confirmation.
 8. Cancel the booking if needed; the seat becomes available again.
 
-## Availabilitying
+## Availability
 
-AeroWay uses PostgreSQL as the source of truth for seat reservations. The `seat_reservations` table has a unique constraint on `(flight_id, seat_id)`, which guarantees that only one reservation can exist for the same seat on the same flight.
+AeroWay uses PostgreSQL as the source of truth for seat reservations. The `seat_reservations` table has a partial unique index on active reservations, which guarantees that only one active hold or confirmed reservation can exist for the same seat on the same flight.
 
-If two booking requests race at the same time, the database accepts one insert and rejects the rest. The service converts duplicate-key violations into HTTP `409 Conflict` responses, allowing the UI to show a clear message: the seat has already been reserved.
+If two booking requests race at the same time, the database accepts one active booking state and rejects the rest. The service converts duplicate-key violations into HTTP `409 Conflict` responses, allowing the UI to show a clear message: the seat has already been reserved.
 
 ## Run Backend Tests
 
@@ -116,9 +116,6 @@ Main endpoints:
 - `POST /api/flights/{flightId}/seats/{seatId}/reservations`
 - `GET /api/reservations/{reservationId}`
 - `POST /api/reservations/{reservationId}/cancel`
-- `POST /api/availability/integrity-check`
-
-The last endpoint powers the availability integrity check in the UI.
 
 ## Data Source
 

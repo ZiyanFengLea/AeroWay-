@@ -20,7 +20,7 @@ The application can become a larger travel booking platform, but the current ver
 
 ## API-First Development
 
-The OpenAPI file documents the public contract for listing flights, listing seats, reserving seats, and running the availability integrity check. This makes the frontend/backend boundary explicit and keeps the UI from depending on hidden implementation details.
+The OpenAPI file documents the public contract for listing flights, listing seats, and managing reservations. This makes the frontend/backend boundary explicit and keeps the UI from depending on hidden implementation details.
 
 ## Frontend And Backend Communication
 

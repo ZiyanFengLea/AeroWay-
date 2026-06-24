@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: AeroWay Flight Booking API
   version: 0.3.0
-  description: API contract for flight search, seat availability, seat reservation, and availability integrity checks.
+  description: API contract for flight search, seat availability, and seat reservation.
 servers:
   - url: http://localhost:8080
 paths:
@@ -109,23 +109,6 @@ paths:
                 $ref: "#/components/schemas/ReservationResponse"
         "404":
           $ref: "#/components/responses/NotFound"
-  /api/availability/integrity-check:
-    post:
-      summary: Run a availability integrity check
-      description: Creates a fresh temporary flight and seat, then sends 100 concurrent reservation attempts to verify that only one booking can be stored.
-      operationId: runAvailabilityIntegrityCheck
-      responses:
-        "200":
-          description: Availability check completed successfully.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AvailabilityIntegrityResponse"
-              example:
-                attempts: 100
-                successfulReservations: 1
-                conflicts: 99
-                duplicateReservationsInDatabase: 0
 components:
   parameters:
     FlightId:
@@ -311,20 +294,3 @@ components:
           type: string
         message:
           type: string
-    AvailabilityIntegrityResponse:
-      type: object
-      required: [attempts, successfulReservations, conflicts, duplicateReservationsInDatabase]
-      properties:
-        attempts:
-          type: integer
-          example: 100
-        successfulReservations:
-          type: integer
-          example: 1
-        conflicts:
-          type: integer
-          example: 99
-        duplicateReservationsInDatabase:
-          type: integer
-          format: int64
-          example: 0

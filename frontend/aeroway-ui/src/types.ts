@@ -54,11 +54,3 @@ export type ErrorResponse = {
   error: string;
   message: string;
 };
-
-// Engineering check result for the backend concurrency-protection endpoint.
-export type AvailabilityIntegrityResponse = {
-  attempts: number;
-  successfulReservations: number;
-  conflicts: number;
-  duplicateReservationsInDatabase: number;
-};
