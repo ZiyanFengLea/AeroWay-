@@ -2,36 +2,6 @@
 -- Source: https://openflights.org/data.php
 -- OpenFlights route data is historical, so AeroWay uses it as realistic sample inventory, not live airline availability.
 
-CREATE TABLE IF NOT EXISTS airports (
-    iata_code TEXT PRIMARY KEY,
-    icao_code TEXT,
-    name TEXT NOT NULL,
-    city TEXT NOT NULL,
-    country TEXT NOT NULL,
-    latitude DOUBLE PRECISION,
-    longitude DOUBLE PRECISION,
-    timezone TEXT
-);
-
-CREATE TABLE IF NOT EXISTS airlines (
-    code TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    country TEXT
-);
-
-CREATE TABLE IF NOT EXISTS routes (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    airline_code TEXT NOT NULL REFERENCES airlines(code),
-    origin TEXT NOT NULL REFERENCES airports(iata_code),
-    destination TEXT NOT NULL REFERENCES airports(iata_code),
-    equipment TEXT,
-    CONSTRAINT uk_route UNIQUE (airline_code, origin, destination)
-);
-
-ALTER TABLE flights ADD COLUMN IF NOT EXISTS airline_code TEXT REFERENCES airlines(code);
-ALTER TABLE flights ADD COLUMN IF NOT EXISTS equipment TEXT;
-ALTER TABLE flights ADD COLUMN IF NOT EXISTS base_price_cents INTEGER;
-
 INSERT INTO airports (iata_code, icao_code, name, city, country, latitude, longitude, timezone) VALUES
     ('AMS', 'EHAM', 'Amsterdam Airport Schiphol', 'Amsterdam', 'Netherlands', 52.308601, 4.76389, 'Europe/Amsterdam'),
     ('ARN', 'ESSA', 'Stockholm-Arlanda Airport', 'Stockholm', 'Sweden', 59.651901245117, 17.918600082397, 'Europe/Stockholm'),
