@@ -29,6 +29,9 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+/**
+ * Proves that 100 concurrent REST reservation attempts produce one success and 99 conflicts.
+ */
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @SuppressWarnings("resource")
@@ -68,6 +71,7 @@ class SeatReservationConcurrencyTest {
     @Test
     @Timeout(30)
     void oneOutOfOneHundredConcurrentReservationsSucceeds() throws Exception {
+        // Latches make the requests start together, increasing the chance of a real database write race.
         ExecutorService executor = Executors.newFixedThreadPool(REQUEST_COUNT);
         CountDownLatch ready = new CountDownLatch(REQUEST_COUNT);
         CountDownLatch start = new CountDownLatch(1);

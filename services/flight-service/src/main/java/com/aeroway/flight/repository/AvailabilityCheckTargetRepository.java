@@ -6,6 +6,9 @@ import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+/**
+ * Creates isolated flight and seat rows so each integrity check is repeatable.
+ */
 @Repository
 public class AvailabilityCheckTargetRepository {
 
@@ -16,6 +19,7 @@ public class AvailabilityCheckTargetRepository {
     }
 
     public AvailabilityCheckTarget createFreshTarget() {
+        // Random identifiers avoid interference from earlier bookings or previous test runs.
         UUID flightId = UUID.randomUUID();
         UUID seatId = UUID.randomUUID();
         String flightNumber = "DEMO-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();

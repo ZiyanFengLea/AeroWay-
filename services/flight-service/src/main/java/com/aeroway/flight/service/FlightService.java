@@ -22,6 +22,10 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * Coordinates flight search, seat holds, booking confirmation, and cancellation.
+ * Spring transactions keep each reservation state change atomic at the service boundary.
+ */
 @Service
 public class FlightService {
 
@@ -56,6 +60,7 @@ public class FlightService {
 
     @Transactional(readOnly = true)
     public List<FlightResponse> searchFlights(FlightSearchCriteria criteria) {
+        // Delegates all filtering to JdbcTemplate SQL and maps database rows to API DTOs.
         return flightRepository.findByCriteria(criteria).stream()
                 .map(this::toFlightResponse)
                 .toList();
@@ -81,6 +86,7 @@ public class FlightService {
 
     @Transactional
     public ReservationResponse holdSeat(UUID flightId, UUID seatId, CreateSeatHoldRequest request) {
+        // Creates a short-lived seat hold before checkout; PostgreSQL enforces one active hold or booking per seat.
         validateFlightAndSeat(flightId, seatId);
         reservationRepository.expireOldHolds();
 
@@ -101,6 +107,7 @@ public class FlightService {
 
     @Transactional
     public ReservationResponse confirmBooking(UUID reservationId, ConfirmBookingRequest request) {
+        // Uses an idempotency key so repeated checkout submissions return one booking result.
         reservationRepository.expireOldHolds();
         String idempotencyKey = request.idempotencyKey().trim();
 
@@ -122,6 +129,7 @@ public class FlightService {
 
     @Transactional
     public ReservationResponse reserveSeat(UUID flightId, UUID seatId, CreateReservationRequest request) {
+        // Maintains the original direct reservation endpoint used by integration and concurrency tests.
         validateFlightAndSeat(flightId, seatId);
         reservationRepository.expireOldHolds();
 
@@ -149,6 +157,7 @@ public class FlightService {
 
     @Transactional
     public ReservationResponse cancelReservation(UUID reservationId) {
+        // Cancellation changes the reservation state and frees the seat for future searches.
         return reservationRepository.cancel(reservationId)
                 .map(this::toReservationResponse)
                 .orElseThrow(() -> new ResourceNotFoundException("Confirmed reservation was not found."));
@@ -209,6 +218,7 @@ public class FlightService {
     }
 
     private ReservationResponse completeBooking(UUID reservationId, String idempotencyKey, boolean simulatePaymentFailure) {
+        // Simulated payment result drives either CONFIRMED or PAYMENT_FAILED without external payment infrastructure.
         try {
             return (simulatePaymentFailure
                     ? reservationRepository.failPayment(reservationId, idempotencyKey)
@@ -223,6 +233,7 @@ public class FlightService {
     }
 
     private void validateFlightAndSeat(UUID flightId, UUID seatId) {
+        // Verifies the URL relationship before writing reservation data.
         if (!flightRepository.existsById(flightId)) {
             throw new ResourceNotFoundException("Flight was not found.");
         }

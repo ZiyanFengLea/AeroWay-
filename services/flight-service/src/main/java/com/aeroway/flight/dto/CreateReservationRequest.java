@@ -3,6 +3,9 @@ package com.aeroway.flight.dto;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Email;
 
+/**
+ * Request body for the direct reservation endpoint retained for compatibility and tests.
+ */
 public record CreateReservationRequest(
         @NotBlank(message = "customerName is required")
         String customerName,

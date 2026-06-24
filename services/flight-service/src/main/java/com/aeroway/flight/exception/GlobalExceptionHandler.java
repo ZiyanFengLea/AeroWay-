@@ -8,6 +8,9 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 
+/**
+ * Maps domain, validation, and database exceptions to stable JSON HTTP responses.
+ */
 @ControllerAdvice
 public class GlobalExceptionHandler {
 

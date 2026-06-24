@@ -8,6 +8,9 @@ import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+/**
+ * Reads seats for a flight and marks each seat unavailable when it has an active hold or confirmed booking.
+ */
 @Repository
 public class SeatRepository {
 
@@ -18,6 +21,7 @@ public class SeatRepository {
     }
 
     public List<SeatWithReservationStatus> findByFlightId(UUID flightId) {
+        // The reserved flag is computed with EXISTS so the frontend receives one compact seat-map response.
         return jdbcTemplate.query("""
                 SELECT
                     s.id,

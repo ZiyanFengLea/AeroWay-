@@ -3,6 +3,9 @@ package com.aeroway.flight.model;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
+/**
+ * Repository model for reservation state, enriched with joined flight and seat display fields.
+ */
 public record SeatReservation(
         UUID id,
         UUID flightId,

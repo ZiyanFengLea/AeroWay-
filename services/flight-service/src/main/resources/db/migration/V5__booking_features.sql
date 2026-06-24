@@ -1,9 +1,11 @@
+-- Adds passenger details and mutable reservation timestamps for the fuller booking flow.
 ALTER TABLE seat_reservations
     ADD COLUMN IF NOT EXISTS customer_email TEXT,
     ADD COLUMN IF NOT EXISTS document_number TEXT,
     ADD COLUMN IF NOT EXISTS passenger_type TEXT NOT NULL DEFAULT 'ADULT',
     ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
+-- Replaces the original all-status uniqueness rule with a confirmed-booking-only rule.
 ALTER TABLE seat_reservations
     DROP CONSTRAINT IF EXISTS uk_reservation_per_flight_seat;
 

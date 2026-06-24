@@ -22,6 +22,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * Exposes the flight search, seat map, direct reservation, and seat-hold REST endpoints.
+ * The controller keeps HTTP concerns separate from reservation transaction logic.
+ */
 @RestController
 @RequestMapping("/api/flights")
 public class FlightController {
@@ -44,6 +48,7 @@ public class FlightController {
             @RequestParam(required = false) LocalTime departureTimeFrom,
             @RequestParam(required = false) LocalTime departureTimeTo
     ) {
+        // Converts query parameters into a typed search object for the service layer.
         return flightService.searchFlights(new FlightSearchCriteria(
                 origin,
                 destination,
@@ -73,6 +78,7 @@ public class FlightController {
             @PathVariable UUID seatId,
             @Valid @RequestBody CreateReservationRequest request
     ) {
+        // Creates a confirmed reservation immediately and returns a Location header for REST clients.
         ReservationResponse response = flightService.reserveSeat(flightId, seatId, request);
         URI location = URI.create("/api/flights/%s/seats/%s/reservations/%s".formatted(
                 flightId,
@@ -89,6 +95,7 @@ public class FlightController {
             @PathVariable UUID seatId,
             @Valid @RequestBody CreateSeatHoldRequest request
     ) {
+        // Starts the checkout flow by holding a seat before payment confirmation.
         ReservationResponse response = flightService.holdSeat(flightId, seatId, request);
         URI location = URI.create("/api/reservations/%s".formatted(response.reservationId()));
         return ResponseEntity.created(location).body(response);

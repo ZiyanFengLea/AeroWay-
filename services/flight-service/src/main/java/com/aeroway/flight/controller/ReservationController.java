@@ -12,6 +12,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * Provides reservation lifecycle endpoints after a seat has been held or confirmed.
+ * The endpoints support checkout confirmation, booking lookup, and cancellation.
+ */
 @RestController
 @RequestMapping("/api/reservations")
 public class ReservationController {

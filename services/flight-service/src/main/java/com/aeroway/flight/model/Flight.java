@@ -3,6 +3,9 @@ package com.aeroway.flight.model;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
+/**
+ * Repository model representing a flight row plus joined airline and airport metadata.
+ */
 public record Flight(
         UUID id,
         String flightNumber,

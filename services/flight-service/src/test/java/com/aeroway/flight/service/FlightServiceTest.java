@@ -18,6 +18,9 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.dao.DuplicateKeyException;
 
+/**
+ * Unit tests the service layer with Mockito, without starting Spring or PostgreSQL.
+ */
 class FlightServiceTest {
 
     private static final UUID FLIGHT_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");

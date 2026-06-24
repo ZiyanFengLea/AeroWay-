@@ -3,6 +3,9 @@ package com.aeroway.flight.dto;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
+/**
+ * API projection of a flight enriched with airline, airport, price, duration, and availability data.
+ */
 public record FlightResponse(
         UUID id,
         String flightNumber,

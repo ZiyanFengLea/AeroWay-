@@ -15,6 +15,10 @@ import java.util.concurrent.TimeUnit;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 
+/**
+ * Runs a deterministic concurrent booking check against a freshly created flight-seat target.
+ * The result demonstrates that PostgreSQL uniqueness protects the system under parallel writes.
+ */
 @Service
 public class AvailabilityIntegrityService {
 
@@ -32,6 +36,7 @@ public class AvailabilityIntegrityService {
     }
 
     public AvailabilityIntegrityResponse runIntegrityCheck() {
+        // CountDownLatch aligns all worker threads so reservation attempts race at nearly the same time.
         AvailabilityCheckTarget target = availabilityCheckTargetRepository.createFreshTarget();
         ExecutorService executor = Executors.newFixedThreadPool(ATTEMPTS);
         CountDownLatch ready = new CountDownLatch(ATTEMPTS);
@@ -72,6 +77,7 @@ public class AvailabilityIntegrityService {
             CountDownLatch start,
             int customerNumber
     ) {
+        // Each task performs the same insert; exactly one should succeed and the rest should hit a duplicate key.
         return () -> {
             ready.countDown();
             await(start);

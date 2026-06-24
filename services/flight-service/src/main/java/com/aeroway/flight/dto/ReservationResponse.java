@@ -3,6 +3,9 @@ package com.aeroway.flight.dto;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
+/**
+ * API projection of a reservation including passenger, flight, seat, hold, and payment fields.
+ */
 public record ReservationResponse(
         UUID reservationId,
         UUID flightId,

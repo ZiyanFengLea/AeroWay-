@@ -6,6 +6,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * Exposes a product-hidden engineering endpoint for demonstrating concurrent booking integrity.
+ */
 @RestController
 @RequestMapping("/api")
 public class AvailabilityController {

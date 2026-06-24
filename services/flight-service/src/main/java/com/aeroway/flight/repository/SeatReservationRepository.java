@@ -8,6 +8,10 @@ import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+/**
+ * Implements reservation persistence with JdbcTemplate and PostgreSQL RETURNING clauses.
+ * The active reservation uniqueness rule is enforced by the database schema, not by in-memory checks.
+ */
 @Repository
 public class SeatReservationRepository {
 
@@ -25,6 +29,7 @@ public class SeatReservationRepository {
             String documentNumber,
             String passengerType
     ) {
+        // Inserts a confirmed reservation directly; duplicate active seats surface as DuplicateKeyException.
         UUID reservationId = jdbcTemplate.queryForObject("""
                 INSERT INTO seat_reservations (
                     flight_id,
@@ -86,6 +91,7 @@ public class SeatReservationRepository {
             String documentNumber,
             String passengerType
     ) {
+        // Inserts a temporary hold that blocks the same seat until payment succeeds, fails, or the hold expires.
         UUID reservationId = jdbcTemplate.queryForObject("""
                 INSERT INTO seat_reservations (
                     flight_id,
@@ -105,6 +111,7 @@ public class SeatReservationRepository {
     }
 
     public Optional<SeatReservation> confirm(UUID reservationId, String idempotencyKey) {
+        // Confirms only unexpired holds; RETURNING id lets the repository reload the joined reservation projection.
         UUID updatedId = jdbcTemplate.query("""
                 UPDATE seat_reservations
                 SET status = 'CONFIRMED',
@@ -144,6 +151,7 @@ public class SeatReservationRepository {
     }
 
     public Optional<SeatReservation> failPayment(UUID reservationId, String idempotencyKey) {
+        // Records a failed payment and releases the seat because PAYMENT_FAILED is outside the active unique index.
         UUID updatedId = jdbcTemplate.query("""
                 UPDATE seat_reservations
                 SET status = 'PAYMENT_FAILED',
@@ -162,6 +170,7 @@ public class SeatReservationRepository {
     }
 
     public int expireOldHolds() {
+        // Converts expired HELD rows into EXPIRED rows so availability queries can treat the seat as free.
         return jdbcTemplate.update("""
                 UPDATE seat_reservations
                 SET status = 'EXPIRED',
@@ -173,6 +182,7 @@ public class SeatReservationRepository {
     }
 
     public Optional<SeatReservation> cancel(UUID reservationId) {
+        // Cancels only confirmed bookings; cancelled rows no longer reserve the flight-seat pair.
         UUID updatedId = jdbcTemplate.query("""
                 UPDATE seat_reservations
                 SET status = 'CANCELLED',
@@ -188,6 +198,7 @@ public class SeatReservationRepository {
     }
 
     private String selectReservationSql() {
+        // Shared projection enriches reservation rows with flight and seat details for API responses.
         return """
                 SELECT
                     sr.id,

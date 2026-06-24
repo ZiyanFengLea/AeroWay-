@@ -14,6 +14,10 @@ import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+/**
+ * Reads flight inventory with JdbcTemplate and SQL-based filtering.
+ * Availability and duration are computed in PostgreSQL so the API receives ready-to-render data.
+ */
 @Repository
 public class FlightRepository {
 
@@ -38,6 +42,7 @@ public class FlightRepository {
     }
 
     public List<Flight> findByCriteria(FlightSearchCriteria criteria) {
+        // Builds a parameterized SQL query from optional search filters without string-concatenating user input.
         StringBuilder sql = new StringBuilder(baseFlightQuery());
         List<Object> params = new ArrayList<>();
         List<Integer> types = new ArrayList<>();
@@ -110,6 +115,7 @@ public class FlightRepository {
     }
 
     private String baseFlightQuery() {
+        // Base query joins airline and airport metadata and counts seats not held or confirmed.
         return """
                 SELECT
                     f.id,
@@ -179,6 +185,7 @@ public class FlightRepository {
             String value,
             String clause
     ) {
+        // Reuses the same text search pattern for airport code, city, and airport name matching.
         if (!hasText(value)) {
             return;
         }
