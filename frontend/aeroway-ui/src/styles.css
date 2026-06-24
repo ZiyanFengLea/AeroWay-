@@ -161,20 +161,20 @@ button:disabled {
   position: relative;
 }
 
-.welcome-video,
+.welcome-media,
 .welcome-tint {
   inset: 0;
   position: absolute;
 }
 
-.welcome-video {
-  height: 100%;
-  object-fit: cover;
+.welcome-media {
+  background:
+    url("https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1800&q=80")
+    center / cover no-repeat;
   transition:
     filter 1200ms ease,
     opacity 1200ms ease,
     transform 1800ms ease;
-  width: 100%;
   z-index: -3;
 }
 
@@ -186,7 +186,7 @@ button:disabled {
   z-index: -2;
 }
 
-.welcome-screen.is-leaving .welcome-video {
+.welcome-screen.is-leaving .welcome-media {
   filter: blur(5px) saturate(1.15);
   opacity: 0.82;
   transform: scale(1.055);

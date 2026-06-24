@@ -1109,7 +1109,7 @@ export function App() {
 }
 
 function WelcomeScreen({ onEnter }: { onEnter: () => void }) {
-  // Full-screen video intro creates travel context before the user reaches the product UI.
+  // Full-screen image intro creates travel context before the user reaches the product UI.
   const [entering, setEntering] = useState(false);
 
   function enterBooking() {
@@ -1121,21 +1121,7 @@ function WelcomeScreen({ onEnter }: { onEnter: () => void }) {
 
   return (
     <main className={`welcome-screen ${entering ? "is-leaving" : ""}`}>
-      <video
-        aria-label="Ocean waves"
-        autoPlay
-        className="welcome-video"
-        loop
-        muted
-        playsInline
-        poster="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1800&q=80"
-      >
-        <source src="/media/ocean.mp4" type="video/mp4" />
-        <source
-          src="https://assets.mixkit.co/videos/preview/mixkit-waves-in-the-water-1164-large.mp4"
-          type="video/mp4"
-        />
-      </video>
+      <div className="welcome-media" aria-hidden="true" />
       <div className="welcome-tint" />
       <section className={`welcome-content ${entering ? "is-entering" : ""}`}>
         <p className="welcome-kicker">AeroWay</p>
