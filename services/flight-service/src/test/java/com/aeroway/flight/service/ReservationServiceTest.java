@@ -21,7 +21,7 @@ import org.springframework.dao.DuplicateKeyException;
 /**
  * Unit tests the service layer with Mockito, without starting Spring or PostgreSQL.
  */
-class FlightServiceTest {
+class ReservationServiceTest {
 
     private static final UUID FLIGHT_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final UUID SEAT_ID = UUID.fromString("22222222-2222-2222-2222-222222222201");
@@ -30,7 +30,7 @@ class FlightServiceTest {
     private final FlightRepository flightRepository = Mockito.mock(FlightRepository.class);
     private final SeatRepository seatRepository = Mockito.mock(SeatRepository.class);
     private final SeatReservationRepository reservationRepository = Mockito.mock(SeatReservationRepository.class);
-    private final FlightService flightService = new FlightService(
+    private final ReservationService reservationService = new ReservationService(
             flightRepository,
             seatRepository,
             reservationRepository
@@ -65,7 +65,7 @@ class FlightServiceTest {
                         "BUSINESS"
                 ));
 
-        ReservationResponse response = flightService.reserveSeat(
+        ReservationResponse response = reservationService.reserveSeat(
                 FLIGHT_ID,
                 SEAT_ID,
                 new CreateReservationRequest(" Ziyan Feng ", "ziyan@example.com", "P12345678", "student")
@@ -96,7 +96,7 @@ class FlightServiceTest {
         when(reservationRepository.create(FLIGHT_ID, SEAT_ID, "Ziyan Feng", null, null, "ADULT"))
                 .thenThrow(new DuplicateKeyException("duplicate key value violates unique constraint"));
 
-        assertThatThrownBy(() -> flightService.reserveSeat(
+        assertThatThrownBy(() -> reservationService.reserveSeat(
                 FLIGHT_ID,
                 SEAT_ID,
                 new CreateReservationRequest("Ziyan Feng")

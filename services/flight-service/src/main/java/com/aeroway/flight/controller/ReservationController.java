@@ -2,7 +2,7 @@ package com.aeroway.flight.controller;
 
 import com.aeroway.flight.dto.ConfirmBookingRequest;
 import com.aeroway.flight.dto.ReservationResponse;
-import com.aeroway.flight.service.FlightService;
+import com.aeroway.flight.service.ReservationService;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,20 +20,20 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/reservations")
 public class ReservationController {
 
-    private final FlightService flightService;
+    private final ReservationService reservationService;
 
-    public ReservationController(FlightService flightService) {
-        this.flightService = flightService;
+    public ReservationController(ReservationService reservationService) {
+        this.reservationService = reservationService;
     }
 
     @GetMapping("/{reservationId}")
     public ReservationResponse getReservation(@PathVariable UUID reservationId) {
-        return flightService.getReservation(reservationId);
+        return reservationService.getReservation(reservationId);
     }
 
     @PostMapping("/{reservationId}/cancel")
     public ReservationResponse cancelReservation(@PathVariable UUID reservationId) {
-        return flightService.cancelReservation(reservationId);
+        return reservationService.cancelReservation(reservationId);
     }
 
     @PostMapping("/{reservationId}/confirm")
@@ -41,6 +41,6 @@ public class ReservationController {
             @PathVariable UUID reservationId,
             @Valid @RequestBody ConfirmBookingRequest request
     ) {
-        return flightService.confirmBooking(reservationId, request);
+        return reservationService.confirmBooking(reservationId, request);
     }
 }

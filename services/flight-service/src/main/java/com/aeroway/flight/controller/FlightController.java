@@ -7,6 +7,7 @@ import com.aeroway.flight.dto.ReservationResponse;
 import com.aeroway.flight.dto.SeatResponse;
 import com.aeroway.flight.model.FlightSearchCriteria;
 import com.aeroway.flight.service.FlightService;
+import com.aeroway.flight.service.ReservationService;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.time.LocalDate;
@@ -24,16 +25,18 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Exposes the flight search, seat map, direct reservation, and seat-hold REST endpoints.
- * The controller keeps HTTP concerns separate from reservation transaction logic.
+ * Flight reads and reservation writes are delegated to separate service boundaries.
  */
 @RestController
 @RequestMapping("/api/flights")
 public class FlightController {
 
     private final FlightService flightService;
+    private final ReservationService reservationService;
 
-    public FlightController(FlightService flightService) {
+    public FlightController(FlightService flightService, ReservationService reservationService) {
         this.flightService = flightService;
+        this.reservationService = reservationService;
     }
 
     @GetMapping
@@ -79,7 +82,7 @@ public class FlightController {
             @Valid @RequestBody CreateReservationRequest request
     ) {
         // Creates a confirmed reservation immediately and returns a Location header for REST clients.
-        ReservationResponse response = flightService.reserveSeat(flightId, seatId, request);
+        ReservationResponse response = reservationService.reserveSeat(flightId, seatId, request);
         URI location = URI.create("/api/flights/%s/seats/%s/reservations/%s".formatted(
                 flightId,
                 seatId,
@@ -96,7 +99,7 @@ public class FlightController {
             @Valid @RequestBody CreateSeatHoldRequest request
     ) {
         // Starts the checkout flow by holding a seat before payment confirmation.
-        ReservationResponse response = flightService.holdSeat(flightId, seatId, request);
+        ReservationResponse response = reservationService.holdSeat(flightId, seatId, request);
         URI location = URI.create("/api/reservations/%s".formatted(response.reservationId()));
         return ResponseEntity.created(location).body(response);
     }
