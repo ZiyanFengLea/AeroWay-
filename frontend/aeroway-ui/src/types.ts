@@ -1,3 +1,4 @@
+// DTO shapes returned by the Spring Boot API and consumed by the React UI.
 export type FlightResponse = {
   id: string;
   flightNumber: string;
@@ -18,6 +19,7 @@ export type FlightResponse = {
   durationMinutes?: number;
 };
 
+// Seat-map item with availability already computed by the backend.
 export type SeatResponse = {
   id: string;
   flightId: string;
@@ -26,6 +28,7 @@ export type SeatResponse = {
   reserved: boolean;
 };
 
+// Reservation lifecycle projection used for holds, confirmations, cancellations, and account history.
 export type ReservationResponse = {
   reservationId: string;
   flightId: string;
@@ -46,11 +49,13 @@ export type ReservationResponse = {
   paymentStatus?: string;
 };
 
+// Standard JSON error response from the backend exception handler.
 export type ErrorResponse = {
   error: string;
   message: string;
 };
 
+// Engineering check result for the backend concurrency-protection endpoint.
 export type AvailabilityIntegrityResponse = {
   attempts: number;
   successfulReservations: number;

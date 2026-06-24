@@ -11,6 +11,7 @@
   box-sizing: border-box;
 }
 
+/* Global controls and reusable feedback primitives. */
 body {
   margin: 0;
 }
@@ -62,6 +63,7 @@ button:disabled {
   min-height: 100vh;
 }
 
+/* Full-screen ocean introduction and transition into the application shell. */
 .icon {
   height: 20px;
   stroke: currentColor;
@@ -413,6 +415,7 @@ button:disabled {
   }
 }
 
+/* Persistent application header and navigation. */
 .site-header {
   align-items: center;
   background: #ffffff;
@@ -453,6 +456,7 @@ button:disabled {
   color: #0f766e;
 }
 
+/* Shared layout containers for booking, account, and content cards. */
 .booking-shell {
   display: grid;
   gap: 24px;
@@ -507,6 +511,7 @@ button:disabled {
   padding: 32px clamp(18px, 4vw, 44px) 48px;
 }
 
+/* Explore homepage with destination imagery and low-fare inspiration. */
 .home-shell {
   display: grid;
   gap: 28px;
@@ -760,6 +765,7 @@ button:disabled {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+/* Booking progress, search form, and inline status messages. */
 .eyebrow {
   color: #0f766e;
   font-size: 0.78rem;
@@ -961,6 +967,7 @@ select {
   color: #1f2933;
 }
 
+/* Flight recommendation cards, skeleton loading, and flight-result rows. */
 .flight-list {
   display: grid;
   gap: 12px;
@@ -1149,6 +1156,7 @@ select {
   width: 100%;
 }
 
+/* Account page lists for saved flights and booking records. */
 .saved-list,
 .record-list {
   display: grid;
@@ -1211,6 +1219,7 @@ select {
   padding: 16px;
 }
 
+/* Flight detail, seat map, and checkout layout. */
 .detail-grid {
   display: grid;
   gap: 14px;
@@ -1306,6 +1315,7 @@ form {
   gap: 14px;
 }
 
+/* Responsive layout adjustments for tablet and mobile screens. */
 @media (max-width: 980px) {
   .booking-shell {
     grid-template-columns: 1fr;

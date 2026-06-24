@@ -6,6 +6,7 @@ import type {
   SeatResponse,
 } from "./types";
 
+// Shared Fetch wrapper normalizes JSON headers and converts non-2xx responses into ApiError.
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     headers: {
@@ -32,6 +33,7 @@ export class ApiError extends Error {
   }
 }
 
+// Search parameters mirror the Spring controller query parameters.
 export type FlightSearchParams = {
   origin?: string;
   destination?: string;
@@ -45,6 +47,7 @@ export type FlightSearchParams = {
 };
 
 export function fetchFlights(params: FlightSearchParams = {}): Promise<FlightResponse[]> {
+  // URLSearchParams keeps optional filters compact and omits empty form fields.
   const query = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== null && value !== "") {

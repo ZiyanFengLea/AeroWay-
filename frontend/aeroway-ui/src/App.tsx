@@ -16,6 +16,8 @@ import type {
 
 type BookingStep = "search" | "flights" | "seats" | "passenger" | "confirmation";
 type AppView = "home" | "booking" | "account";
+
+// Local UI models keep recommendation and account state explicit without adding frontend libraries.
 type UserProfile = {
   name: string;
   email: string;
@@ -53,6 +55,7 @@ const defaultUserProfile: UserProfile = {
   passengerType: "ADULT",
 };
 
+// Step labels drive the booking progress indicator.
 const steps: Array<{ id: BookingStep; label: string }> = [
   { id: "search", label: "Search" },
   { id: "flights", label: "Flights" },
@@ -94,6 +97,7 @@ const airportOptions = [
   { code: "ZRH", label: "Zurich Airport", city: "Zurich" },
 ];
 
+// Static airline choices match the seed data used by the backend migrations.
 const airlineOptions = [
   ["", "Any airline"],
   ["AW", "AeroWay Airlines"],
@@ -113,6 +117,7 @@ const airlineOptions = [
   ["DL", "Delta Air Lines"],
 ] as const;
 
+// Destination copy and images enrich backend flight data for the Explore homepage.
 const destinationContent: Record<string, { imageUrl: string; summary: string }> = {
   AMS: {
     imageUrl: "https://images.unsplash.com/photo-1512470876302-972faa2aa9a4?auto=format&fit=crop&w=1200&q=80",
@@ -211,6 +216,7 @@ const destinationContent: Record<string, { imageUrl: string; summary: string }> 
 const fallbackDestinationImage = "https://source.unsplash.com/1200x800/?";
 
 export function App() {
+  // Top-level state controls the welcome screen, Explore page, booking flow, and account page.
   const [showWelcome, setShowWelcome] = useState(true);
   const [appEntering, setAppEntering] = useState(false);
   const [view, setView] = useState<AppView>("home");
@@ -263,6 +269,7 @@ export function App() {
     () => seats.filter((seat) => !seat.reserved).length,
     [seats]
   );
+  // Rule-based recommendation is recalculated from the current flight results and user context.
   const recommendedFlight = useMemo(
     () =>
       recommendFlight(flights, {
@@ -276,6 +283,7 @@ export function App() {
   );
   const seatRecommendations = useMemo(() => recommendSeats(seats), [seats]);
   const recommendedSeat = seatRecommendations[0] ?? null;
+  // Explore content is derived from backend flights and grouped by destination.
   const destinationSpotlights = useMemo(() => buildDestinationSpotlights(exploreFlights), [exploreFlights]);
   const lowFareFlights = useMemo(
     () =>
@@ -297,6 +305,7 @@ export function App() {
   }
 
   function showToast(message: string, kind: Toast["kind"] = "info") {
+    // Toasts provide short-lived feedback for success, conflict, and loading failures.
     setToast({ kind, message });
     if (toastTimeoutRef.current) {
       window.clearTimeout(toastTimeoutRef.current);
@@ -305,6 +314,7 @@ export function App() {
   }
 
   async function loadExploreFlights() {
+    // Loads all bookable flights once and reuses them for destination and low-fare recommendations.
     if (loadingExplore || exploreFlights.length > 0) {
       return;
     }
@@ -325,6 +335,7 @@ export function App() {
   }
 
   async function loadFlights(nextStep: BookingStep = "flights") {
+    // Runs the backend search; if exact filters are too narrow, falls back to nearby useful results.
     setLoadingFlights(true);
     clearStatus();
     try {
@@ -352,6 +363,7 @@ export function App() {
   }
 
   function searchParams() {
+    // Translates controlled form fields into API query parameters.
     return {
       origin,
       destination,
@@ -366,6 +378,7 @@ export function App() {
   }
 
   async function fetchFallbackFlights() {
+    // Keeps the product usable by showing same-route, same-origin, or same-destination alternatives.
     if (origin && destination) {
       const sameRoute = await fetchFlights({ origin, destination, directOnly });
       if (sameRoute.length > 0) {
@@ -421,6 +434,7 @@ export function App() {
   }
 
   async function loadSeats(flightId: string) {
+    // Retrieves the backend-computed seat map for a selected flight.
     setLoadingSeats(true);
     clearStatus();
     try {
@@ -434,6 +448,7 @@ export function App() {
   }
 
   function updateUserProfile(nextProfile: UserProfile) {
+    // Persists profile edits locally so later checkout forms are prefilled.
     setUserProfile(nextProfile);
     storeValue("aeroway.userProfile", nextProfile);
     setCustomerName(nextProfile.name);
@@ -443,6 +458,7 @@ export function App() {
   }
 
   function rememberViewedFlight(flight: FlightResponse) {
+    // Stores lightweight browsing history for the account page.
     setViewedFlights((current) => {
       const next = [flight, ...current.filter((item) => item.id !== flight.id)].slice(0, 8);
       storeValue("aeroway.viewedFlights", next);
@@ -451,6 +467,7 @@ export function App() {
   }
 
   function toggleFavoriteFlight(flight: FlightResponse) {
+    // Maintains a local saved-flight list without requiring authentication.
     setFavoriteFlights((current) => {
       const exists = current.some((item) => item.id === flight.id);
       const next = exists
@@ -466,6 +483,7 @@ export function App() {
   }
 
   function rememberBooking(record: ReservationResponse) {
+    // Stores booking lifecycle records so confirmations and cancellations remain visible in account history.
     setBookingRecords((current) => {
       const next = [record, ...current.filter((item) => item.reservationId !== record.reservationId)];
       storeValue("aeroway.bookingRecords", next);
@@ -485,6 +503,7 @@ export function App() {
   }
 
   function browseDestination(destinationSpotlight: DestinationSpotlight) {
+    // Converts an Explore destination card into preloaded booking results.
     const destinationFlights = destinationSpotlight.sampleFlights;
     const firstFlight = destinationFlights[0];
     if (firstFlight) {
@@ -502,6 +521,7 @@ export function App() {
   }
 
   async function chooseFlight(flight: FlightResponse) {
+    // Selecting a flight records browsing intent and moves the user to the live seat map.
     rememberViewedFlight(flight);
     setSelectedFlight(flight);
     setSelectedSeat(null);
@@ -511,6 +531,7 @@ export function App() {
   }
 
   async function chooseSeat(seat: SeatResponse) {
+    // Seat selection calls the hold endpoint, reserving checkout time before payment confirmation.
     if (!selectedFlight) {
       return;
     }
@@ -553,6 +574,7 @@ export function App() {
   }
 
   async function submitReservation(event: FormEvent<HTMLFormElement>) {
+    // Checkout confirms the existing hold using an idempotency key to avoid duplicate orders.
     event.preventDefault();
     if (!selectedFlight || !selectedSeat || !reservation) {
       return;
@@ -592,6 +614,7 @@ export function App() {
   }
 
   async function handleCancelReservation() {
+    // Cancellation updates backend state and refreshes seat availability.
     if (!reservation || !selectedFlight) {
       return;
     }
@@ -1086,6 +1109,7 @@ export function App() {
 }
 
 function WelcomeScreen({ onEnter }: { onEnter: () => void }) {
+  // Full-screen video intro creates travel context before the user reaches the product UI.
   const [entering, setEntering] = useState(false);
 
   function enterBooking() {
@@ -1139,6 +1163,7 @@ function WelcomeScreen({ onEnter }: { onEnter: () => void }) {
 }
 
 function ToastMessage({ onClose, toast }: { onClose: () => void; toast: Toast }) {
+  // Compact notification component used for booking success, conflicts, and recoverable errors.
   return (
     <div className={`toast ${toast.kind}`} role="status">
       <Icon name={toast.kind === "success" ? "check" : toast.kind === "error" ? "alert" : "info"} />
@@ -1151,6 +1176,7 @@ function ToastMessage({ onClose, toast }: { onClose: () => void; toast: Toast })
 }
 
 function StatusNotice({ message, tone }: { message: string; tone: Toast["kind"] }) {
+  // Inline status message used when the user needs context inside the booking flow.
   return (
     <div className={`notice ${tone}`} role={tone === "error" ? "alert" : "status"}>
       <Icon name={tone === "success" ? "check" : tone === "error" ? "alert" : "info"} />
@@ -1176,6 +1202,7 @@ function ExploreHome({
   onSelectDestination: (destination: DestinationSpotlight) => void;
   selectedDestination: DestinationSpotlight | null;
 }) {
+  // Landing page derived from live flight inventory, used to inspire trips before search.
   const featuredDestinations = destinations.slice(0, 6);
 
   return (
@@ -1266,6 +1293,7 @@ function DestinationCard({
   onBrowse: (destination: DestinationSpotlight) => void;
   onSelect: (destination: DestinationSpotlight) => void;
 }) {
+  // Destination card combines backend fare data with curated image and travel copy.
   return (
     <article className="destination-card">
       <button
@@ -1302,6 +1330,7 @@ function DestinationDetail({
   onBrowse: (destination: DestinationSpotlight) => void;
   onOpenFlight: (flight: FlightResponse) => void;
 }) {
+  // Detail panel previews a destination and exposes concrete bookable flights.
   return (
     <section className="destination-detail">
       <div
@@ -1356,6 +1385,7 @@ function HomeSkeleton() {
 }
 
 function FlightSkeletonList() {
+  // Skeleton loading preserves layout while flight search is in progress.
   return (
     <div className="flight-list" aria-label="Loading flights">
       {[0, 1, 2].map((item) => (
@@ -1432,6 +1462,7 @@ function FlightRow({
   onChoose: (flight: FlightResponse) => void;
   onToggleFavorite: (flight: FlightResponse) => void;
 }) {
+  // Flight result row supports selection, saving, and recommendation highlighting.
   return (
     <article className={`flight-row ${isRecommended ? "recommended" : ""}`}>
       <div className="flight-main">
@@ -1472,6 +1503,7 @@ function RecommendedFlightCard({
   onChoose: (flight: FlightResponse) => void;
   recommendation: FlightRecommendation;
 }) {
+  // Displays the highest-scoring rule-based flight with explicit recommendation reasons.
   const { flight, reasons } = recommendation;
 
   return (
@@ -1509,6 +1541,7 @@ function RecommendedSeatCard({
   onChoose: (seat: SeatResponse) => void;
   recommendation: SeatRecommendation;
 }) {
+  // Presents the top seat recommendation before the full seat grid.
   return (
     <article className="recommendation-card seat-recommendation">
       <div>
@@ -1543,6 +1576,7 @@ function UserAccount({
   profile: UserProfile;
   viewedFlights: FlightResponse[];
 }) {
+  // Account page stores profile, browsing history, favorites, and bookings in localStorage.
   function updateProfileField(field: keyof UserProfile, value: string) {
     onProfileChange({ ...profile, [field]: value });
   }
@@ -1870,6 +1904,7 @@ function createIdempotencyKey() {
 }
 
 function buildDestinationSpotlights(flights: FlightResponse[]): DestinationSpotlight[] {
+  // Groups backend flights by destination and computes homepage cards with fare and inventory summaries.
   const groupedFlights = new Map<string, FlightResponse[]>();
 
   flights.forEach((flight) => {
@@ -1923,6 +1958,7 @@ function recommendFlight(
     viewedFlights: FlightResponse[];
   }
 ): FlightRecommendation | null {
+  // Scores visible flights by fare, duration, seat availability, direct routing, and recent user context.
   if (flights.length === 0) {
     return null;
   }
@@ -2005,6 +2041,7 @@ function isNearPreferredDeparture(flight: FlightResponse, preferredTime: string)
 }
 
 function recommendSeats(seats: SeatResponse[]): SeatRecommendation[] {
+  // Scores available seats by front-row position, window preference, and distance from reserved neighbors.
   const availableSeats = seats.filter((seat) => !seat.reserved);
   const reservedSeatNumbers = new Set(seats.filter((seat) => seat.reserved).map((seat) => seat.seatNumber));
 
@@ -2070,6 +2107,7 @@ function adjacentSeatLetters(letter: string) {
 }
 
 function readStoredValue<T>(key: string, fallback: T): T {
+  // Reads optional localStorage state while keeping server-side or restricted environments safe.
   if (typeof window === "undefined") {
     return fallback;
   }
@@ -2083,6 +2121,7 @@ function readStoredValue<T>(key: string, fallback: T): T {
 }
 
 function storeValue<T>(key: string, value: T) {
+  // Persists non-critical account and browsing state; failures should not block booking.
   if (typeof window === "undefined") {
     return;
   }
