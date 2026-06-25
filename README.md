@@ -1,21 +1,22 @@
 # AeroWay
 
-AeroWay is a full-stack flight booking application focused on safe seat reservations.
+AeroWay is a full-stack flight booking system focused on reliable seat inventory and reservation consistency.
 
-Users can browse available flights, inspect the seat map, choose an available seat, enter passenger details, and complete a booking. The backend protects seat availability with PostgreSQL constraints and transactional reservation logic, so the same flight seat cannot be booked twice even under concurrent requests.
+The system supports flight search, seat availability, temporary seat holds, booking confirmation, payment outcome simulation, cancellation, and conflict handling for concurrent reservation requests. PostgreSQL constraints and transactional reservation logic protect seat availability so the same physical seat cannot be actively held or confirmed more than once.
 
-The sample flight inventory is generated from public OpenFlights airport, airline, and route datasets, then stored locally in PostgreSQL as AeroWay bookable inventory.
+Flight inventory is seeded from public OpenFlights airport, airline, and route datasets and stored in PostgreSQL as AeroWay bookable inventory.
 
 ## Core Capabilities
 
-- Browse flights
-- Browse realistic airport, airline, and route-based inventory
+- Browse airport, airline, and route-based flight inventory
 - Filter by origin, destination, date, airline, cabin, price, direct flight, and departure time
 - Review flight details including airport names, carrier, aircraft, duration, fares, baggage note, and available seats
 - View live seat availability
-- Select an available seat
+- Select and temporarily hold an available seat
 - Enter passenger name, email, document number, and passenger type
-- Complete a seat reservation
+- Complete a booking from an active seat hold
+- Reuse idempotency keys for repeated checkout confirmation requests
+- Simulate payment success and payment failure outcomes
 - View booking confirmation details
 - Cancel confirmed bookings and release the seat back into inventory
 - Receive clear conflict feedback when a seat is already booked
@@ -58,9 +59,9 @@ flowchart LR
     OpenAPI -.documents.-> Backend
 ```
 
-The current system has one backend service, `flight-service`, because flight inventory and seat reservation are the core domain. The design remains extensible for future hotel, payment, and itinerary services.
+The current system contains one backend service, `flight-service`, with internal service boundaries for flight inventory reads and reservation lifecycle commands. The design remains extensible for future hotel, payment, itinerary, and coordination services.
 
-## Run The Application
+## Run the Application
 
 From the repository root:
 
@@ -76,20 +77,21 @@ Open:
 
 ## Booking Flow
 
-1. Open the flight booking UI.
-2. Search or filter available flights.
-3. Review flight details and the seat map.
-4. Select an available seat.
+1. Search or filter available flights.
+2. Review flight details and the seat map.
+3. Select an available seat.
+4. Create a temporary seat hold.
 5. Enter passenger details.
-6. Complete the booking.
-7. Review the booking confirmation.
-8. Cancel the booking if needed; the seat becomes available again.
+6. Confirm the booking with an idempotency key.
+7. Process the simulated payment outcome.
+8. Review the booking confirmation.
+9. Cancel the booking when required; the seat becomes available again.
 
 ## Availability
 
 AeroWay uses PostgreSQL as the source of truth for seat reservations. The `seat_reservations` table has a partial unique index on active reservations, which guarantees that only one active hold or confirmed reservation can exist for the same seat on the same flight.
 
-If two booking requests race at the same time, the database accepts one active booking state and rejects the rest. The service converts duplicate-key violations into HTTP `409 Conflict` responses, allowing the UI to show a clear message: the seat has already been reserved.
+If two booking requests race at the same time, the database accepts one active booking state and rejects the rest. The service converts duplicate-key violations into HTTP `409 Conflict` responses, and the UI displays a clear seat-conflict message.
 
 ## Run Backend Tests
 
@@ -113,21 +115,23 @@ Main endpoints:
 - `GET /api/flights`
 - `GET /api/flights/{flightId}`
 - `GET /api/flights/{flightId}/seats`
+- `POST /api/flights/{flightId}/seats/{seatId}/holds`
 - `POST /api/flights/{flightId}/seats/{seatId}/reservations`
 - `GET /api/reservations/{reservationId}`
+- `POST /api/reservations/{reservationId}/confirm`
 - `POST /api/reservations/{reservationId}/cancel`
 
 ## Data Source
 
-AeroWay seeds realistic sample inventory from the public OpenFlights airport, airline, and route datasets:
+AeroWay seeds flight inventory from the public OpenFlights airport, airline, and route datasets:
 
 ```text
 https://openflights.org/data.php
 ```
 
-The OpenFlights route data is historical, so AeroWay uses it as realistic sample inventory rather than live airline availability. Actual seat reservations are handled by AeroWay's own PostgreSQL tables.
+The OpenFlights route data is historical, so AeroWay uses it as representative flight inventory rather than live airline availability. Actual seat reservations are handled by AeroWay's own PostgreSQL tables.
 
-To reload all seed data from scratch during local development:
+Reload all seed data from scratch during local development:
 
 ```bash
 docker compose down -v
@@ -138,9 +142,7 @@ docker compose up --build
 
 - More flight search filters
 - Multi-passenger bookings
-- Booking cancellation
-- Payment authorization
 - Hotel reservations
 - Itinerary management
-- Idempotency keys for retries
+- External payment authorization
 - Saga-based coordination across services
